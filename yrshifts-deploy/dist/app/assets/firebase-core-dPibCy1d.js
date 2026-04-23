@@ -1,0 +1,1 @@
+import{_ as e}from"./firebase-auth-UI1D8gLS.js";e(`firebase`,`11.10.0`,`app`);

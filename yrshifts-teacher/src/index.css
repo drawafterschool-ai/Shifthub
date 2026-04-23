@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg:          #0F1117;
+  --surface:     #181B25;
+  --card:        #1C2030;
+  --raised:      #232838;
+  --border:      #2A2F40;
+  --text:        #E8ECF4;
+  --muted:       #8B92A8;
+  --dim:         #5C6380;
+  --accent:      #4EA8D6;
+  --accent-soft: rgba(78,168,214,0.12);
+  --green:       #34D399;
+  --green-soft:  rgba(52,211,153,0.12);
+  --amber:       #FBBF24;
+  --amber-soft:  rgba(251,191,36,0.10);
+  --red:         #F87171;
+  --red-soft:    rgba(248,113,113,0.10);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html {
+  height: 100%;
+  background: var(--bg);
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body, #root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  font-family: Inter, system-ui, -apple-system, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+
+::-webkit-scrollbar       { width: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+@layer utilities {
+  .bg-app     { background: var(--bg); }
+  .bg-surface { background: var(--surface); }
+  .bg-card    { background: var(--card); }
+  .bg-raised  { background: var(--raised); }
+  .border-app { border-color: var(--border); }
+  .text-primary { color: var(--text); }
+  .text-muted   { color: var(--muted); }
+  .text-dim     { color: var(--dim); }
+  .text-accent  { color: var(--accent); }
+  .text-ok      { color: var(--green); }
+  .text-warn    { color: var(--amber); }
+  .text-danger  { color: var(--red); }
+  .bg-accent-soft { background: var(--accent-soft); }
+  .bg-ok-soft     { background: var(--green-soft); }
+  .bg-warn-soft   { background: var(--amber-soft); }
+  .bg-danger-soft { background: var(--red-soft); }
+  .safe-bottom    { padding-bottom: var(--safe-bottom); }
+}

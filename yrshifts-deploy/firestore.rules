@@ -1,0 +1,104 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() { return request.auth != null; }
+
+    function userRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isAdmin() { return isSignedIn() && userRole() == 'admin'; }
+
+    // ── Users ─────────────────────────────────────────────────────────────────
+    match /users/{userId} {
+      allow read:   if isSignedIn();
+      allow create: if isAdmin();
+      allow delete: if isAdmin();
+      allow update: if isAdmin()
+        || (isSignedIn()
+            && request.auth.uid == userId
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']));
+    }
+
+    // ── Shifts ────────────────────────────────────────────────────────────────
+    match /shifts/{shiftId} {
+      allow read:   if isSignedIn();
+      allow create: if isAdmin();
+      allow delete: if isAdmin();
+      allow update: if isAdmin()
+        || (isSignedIn()
+            && resource.data.instructorId == request.auth.uid
+            && request.resource.data.diff(resource.data)
+               .affectedKeys().hasOnly(['confirmationStatus']))
+        || (isSignedIn()
+            && resource.data.claimable == true
+            && resource.data.instructorId == null
+            && request.resource.data.diff(resource.data)
+               .affectedKeys().hasOnly(['instructorId','claimable','confirmationStatus']));
+    }
+
+    // ── Settings ──────────────────────────────────────────────────────────────
+    match /settings/{docId} {
+      allow read:  if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ── Knowledge Base ────────────────────────────────────────────────────────
+    match /kb_nodes/{nodeId} {
+      allow read:  if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ── Weekly Buzz ───────────────────────────────────────────────────────────
+    match /weekly_buzz/{postId} {
+      allow read:   if isSignedIn();
+      allow create: if isAdmin();
+      allow delete: if isAdmin();
+      allow update: if isAdmin()
+        || (isSignedIn()
+            && request.resource.data.diff(resource.data)
+               .affectedKeys().hasOnly(['seenBy', 'likes', 'comments']));
+    }
+
+    // ── Notifications ─────────────────────────────────────────────────────────
+    match /notifications/{notifId} {
+      allow read: if isSignedIn()
+        && (resource.data.recipientId == request.auth.uid
+            || resource.data.forAdmin  == true
+            || isAdmin());
+      allow create: if isSignedIn();
+      allow update: if isSignedIn()
+        && (resource.data.recipientId == request.auth.uid
+            || resource.data.forAdmin  == true
+            || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // ── Events ────────────────────────────────────────────────────────────────
+    match /events/{eventId} {
+      allow read:   if isSignedIn();
+      allow create: if isAdmin();
+      allow delete: if isAdmin();
+      allow update: if isAdmin()
+        // Teachers can only update their own RSVP field
+        || (isSignedIn()
+            && request.resource.data.diff(resource.data)
+               .affectedKeys().hasOnly(['rsvps']));
+    }
+
+    // ── Reminders (written by Cloud Functions only — no client access needed) ──
+    match /reminders/{reminderId} {
+      allow read:  if isAdmin();
+      allow write: if false;   // Cloud Functions use Admin SDK — bypasses these rules
+    }
+
+    // ── Chat ──────────────────────────────────────────────────────────────────
+    match /chats/{chatId} {
+      allow read, write: if isSignedIn();
+      match /messages/{msgId} {
+        allow read, write: if isSignedIn();
+      }
+    }
+  }
+}
