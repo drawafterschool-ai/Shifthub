@@ -1,0 +1,1 @@
+var e=()=>`s`+Math.random().toString(36).slice(2,9),t=(e=``,t=``)=>((e[0]||``)+(t[0]||``)).toUpperCase(),n=(e=``)=>{let t=e.replace(/\D/g,``);return t.length===10?`(${t.slice(0,3)}) ${t.slice(3,6)}-${t.slice(6)}`:e},r=Array.from({length:38},(e,t)=>t+3);export{e as i,n,t as r,r as t};

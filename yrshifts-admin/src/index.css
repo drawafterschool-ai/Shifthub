@@ -1,0 +1,114 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Design tokens ─────────────────────────────────────────────────── */
+:root {
+  /* Dark theme (default) */
+  --bg:          #0F1117;
+  --surface:     #181B25;
+  --card:        #1C2030;
+  --raised:      #232838;
+  --border:      #2A2F40;
+  --border-lt:   #323848;
+  --text:        #E8ECF4;
+  --muted:       #8B92A8;
+  --dim:         #5C6380;
+  --accent:      #4EA8D6;
+  --accent-soft: rgba(78,168,214,0.12);
+  --accent-bd:   rgba(78,168,214,0.3);
+  --green:       #34D399;
+  --green-soft:  rgba(52,211,153,0.12);
+  --amber:       #FBBF24;
+  --amber-soft:  rgba(251,191,36,0.12);
+  --red:         #F87171;
+  --red-soft:    rgba(248,113,113,0.10);
+  --unassigned-bg: rgba(251,191,36,0.06);
+  --claim-bg:    rgba(248,113,113,0.06);
+  --claim-bd:    #F87171;
+}
+
+.light {
+  --bg:          #F7F8FA;
+  --surface:     #FFFFFF;
+  --card:        #FFFFFF;
+  --raised:      #F3F4F6;
+  --border:      #E5E7EB;
+  --border-lt:   #F0F1F3;
+  --text:        #111827;
+  --muted:       #6B7280;
+  --dim:         #9CA3AF;
+  --accent:      #2D9CDB;
+  --accent-soft: rgba(45,156,219,0.08);
+  --accent-bd:   rgba(45,156,219,0.3);
+  --green:       #22C55E;
+  --green-soft:  rgba(34,197,94,0.10);
+  --amber:       #F59E0B;
+  --amber-soft:  rgba(245,158,11,0.10);
+  --red:         #EF4444;
+  --red-soft:    rgba(239,68,68,0.06);
+  --unassigned-bg: rgba(245,158,11,0.06);
+  --claim-bg:    rgba(239,68,68,0.04);
+  --claim-bd:    #EF4444;
+}
+
+/* ── Base ──────────────────────────────────────────────────────────── */
+* { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Inter, system-ui, -apple-system, sans-serif;
+}
+
+/* ── Scrollbar ─────────────────────────────────────────────────────── */
+::-webkit-scrollbar       { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ── Utility shortcuts ─────────────────────────────────────────────── */
+@layer utilities {
+  .bg-app        { background: var(--bg); }
+  .bg-surface    { background: var(--surface); }
+  .bg-card       { background: var(--card); }
+  .bg-raised     { background: var(--raised); }
+  .border-app    { border-color: var(--border); }
+  .text-primary  { color: var(--text); }
+  .text-muted    { color: var(--muted); }
+  .text-dim      { color: var(--dim); }
+  .text-accent   { color: var(--accent); }
+  .text-ok       { color: var(--green); }
+  .text-warn     { color: var(--amber); }
+  .text-danger   { color: var(--red); }
+  .bg-accent-soft{ background: var(--accent-soft); }
+  .bg-ok-soft    { background: var(--green-soft); }
+  .bg-warn-soft  { background: var(--amber-soft); }
+  .bg-danger-soft{ background: var(--red-soft); }
+
+  .ring-accent   { --tw-ring-color: var(--accent); }
+
+  /* slide-in animation for drawers */
+  .animate-slide-in { animation: slideIn 0.25s ease; }
+  @keyframes slideIn { from { transform: translateX(100%) } to { transform: translateX(0) } }
+
+  .animate-fade-in { animation: fadeIn 0.15s ease; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(-4px) } to { opacity:1; transform:none } }
+}
+
+/* ── Rich text editor lists ─────────────────────────────────────────── */
+[contenteditable] ul,
+[contenteditable] ol,
+.prose ul,
+.prose ol {
+  padding-left: 1.4em;
+  margin: 0.4em 0;
+}
+[contenteditable] ul,
+.prose ul { list-style-type: disc; }
+[contenteditable] ol,
+.prose ol { list-style-type: decimal; }
+[contenteditable] li,
+.prose li { margin: 0.15em 0; }
