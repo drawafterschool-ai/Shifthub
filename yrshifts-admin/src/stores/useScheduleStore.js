@@ -64,7 +64,7 @@ const useScheduleStore = create((set, get) => ({
     await updateDoc(doc(db, 'shifts', shiftId), {
       date:                toDate,
       instructorId:        isUnassigned ? null : toOwner,
-      claimable:           isUnassigned,
+      claimable:           false,   // drag to unassigned = draft, NOT open shift
       confirmationStatus:  isUnassigned ? null : 'pending',
     })
     if (notify) {
@@ -168,7 +168,7 @@ const useScheduleStore = create((set, get) => ({
 
   async unassignShift(shift) {
     await updateDoc(doc(db, 'shifts', shift.id), {
-      instructorId: null, claimable: true, confirmationStatus: null,
+      instructorId: null, claimable: false, confirmationStatus: null,
     })
   },
 

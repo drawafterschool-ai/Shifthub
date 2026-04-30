@@ -64,7 +64,7 @@ function ForwardSheet({ text, chats, onClose, onForward }) {
 }
 
 // ── Message bubble ─────────────────────────────────────────────────────────────
-function Bubble({ msg, isMine, onReact, onReply, onForward }) {
+function Bubble({ msg, isMine, onReact, onReply, onForward, onDelete }) {
   const [showActions, setShowActions] = useState(false)
   const [showEmoji,   setShowEmoji]   = useState(false)
   const hasReactions = msg.reactions && Object.keys(msg.reactions).some(k => msg.reactions[k]?.length > 0)
@@ -135,6 +135,10 @@ function Bubble({ msg, isMine, onReact, onReply, onForward }) {
             )}
             <button onClick={() => { onForward(); setShowActions(false) }}
               className="w-8 h-8 rounded-xl bg-card border border-app text-sm flex items-center justify-center cursor-pointer">↗</button>
+            {isMine && (
+              <button onClick={() => { if (window.confirm('Delete message?')) onDelete(); setShowActions(false) }}
+                className="w-8 h-8 rounded-xl bg-danger-soft border border-danger/30 text-danger text-sm flex items-center justify-center cursor-pointer">🗑</button>
+            )}
           </div>
         )}
       </div>
@@ -156,7 +160,7 @@ function Bubble({ msg, isMine, onReact, onReply, onForward }) {
 
 // ── Main ChatView ──────────────────────────────────────────────────────────────
 export default function ChatView() {
-  const { chats, messages, activeChatId, loading, setActiveChat, markChatRead, sendMessage, addReaction } = useChatStore()
+  const { chats, messages, activeChatId, loading, setActiveChat, markChatRead, sendMessage, addReaction, pinChat, deleteMessage, deleteChat } = useChatStore()
   const { user, userProfile }  = useAuthStore()
   const { _userId }            = useTeacherStore()
 
@@ -254,29 +258,81 @@ export default function ChatView() {
             <p className="text-xs text-dim mt-1 mb-4">Tap ✏️ to message a colleague</p>
           </div>
         ) : chats.map(chat => (
-          <button key={chat.id} onClick={() => openChat(chat.id)}
-            className="flex items-center gap-3 w-full px-4 py-3.5 text-left cursor-pointer bg-transparent border-none border-b border-app/20 hover:bg-raised transition-colors">
-            <div className="w-11 h-11 rounded-full bg-accent-soft flex items-center justify-center text-xl flex-shrink-0">
-              {chat.isGroup ? '👥' : '💬'}
+          <div key={chat.id} className="relative group">
+            <button onClick={() => openChat(chat.id)}
+              className="flex items-center gap-3 w-full px-4 py-3.5 text-left cursor-pointer bg-transparent border-none border-b border-app/20 hover:bg-raised transition-colors">
+              <div className="w-11 h-11 rounded-full bg-accent-soft flex items-center justify-center text-xl flex-shrink-0">
+                {chat.isGroup ? '👥' : '💬'}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  {chat.pinnedAt && <span className="text-xs">📌</span>}
+                  <p className="text-sm font-bold text-primary truncate">{chat.name}</p>
+                </div>
+                <p className="text-xs text-dim truncate mt-0.5">{chat.lastMessage || 'No messages yet'}</p>
+              </div>
+              <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                <span className="text-2xs text-dim">{fmtChatTime(chat.lastAt)}</span>
+                {(() => {
+                  const lastReadTs = user ? (chat.lastRead?.[user.uid]?.seconds || 0) : 0
+                  const msgs       = messages[chat.id] || []
+                  const unread     = msgs.filter(m => m.authorId !== user?.uid && (m.createdAt?.seconds || 0) > lastReadTs).length
+                  return unread > 0 ? (
+                    <span className="min-w-[18px] h-[18px] rounded-full bg-accent text-white text-[9px] font-bold flex items-center justify-center px-1">{unread > 9 ? '9+' : unread}</span>
+                  ) : null
+                })()}
+              </div>
+            </button>
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 hidden group-hover:flex gap-1 bg-card border border-app rounded-lg p-1 z-10">
+              <button onClick={e => { e.stopPropagation(); pinChat(chat.id, !chat.pinnedAt) }}
+                title={chat.pinnedAt ? 'Unpin' : 'Pin'}
+                className="w-7 h-7 rounded-md hover:bg-raised flex items-center justify-center text-sm cursor-pointer bg-transparent border-none">
+                {chat.pinnedAt ? '📌' : '📍'}
+              </button>
+              {(chat.createdBy === user?.uid || !chat.createdBy) && (
+                <button onClick={e => { e.stopPropagation(); if (window.confirm('Delete this chat?')) deleteChat(chat.id) }}
+                  className="w-7 h-7 rounded-md hover:bg-danger-soft flex items-center justify-center text-sm cursor-pointer bg-transparent border-none text-danger">
+                  🗑
+                </button>
+              )}
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-primary truncate">{chat.name}</p>
-              <p className="text-xs text-dim truncate mt-0.5">{chat.lastMessage || 'No messages yet'}</p>
-            </div>
-            <div className="flex flex-col items-end gap-1 flex-shrink-0">
-              <span className="text-2xs text-dim">{fmtChatTime(chat.lastAt)}</span>
-              {(() => {
-                const lastReadTs = user ? (chat.lastRead?.[user.uid]?.seconds || 0) : 0
-                const msgs       = messages[chat.id] || []
-                const unread     = msgs.filter(m => m.authorId !== user?.uid && (m.createdAt?.seconds || 0) > lastReadTs).length
-                return unread > 0 ? (
-                  <span className="min-w-[18px] h-[18px] rounded-full bg-accent text-white text-[9px] font-bold flex items-center justify-center px-1">{unread > 9 ? '9+' : unread}</span>
-                ) : null
-              })()}
-            </div>
-          </button>
+          </div>
         ))}
       </div>
+
+      {/* DM Picker — must be inside showList block */}
+      {showDMPicker && (
+        <DMPicker
+          chats={chats}
+          currentUserId={user?.uid}
+          onClose={() => setShowDMPicker(false)}
+          onStartDM={async (otherId, otherName) => {
+            const { addDoc, collection, query, where, getDocs, serverTimestamp } = await import('firebase/firestore')
+            const { db } = await import('../../utils/firebase')
+            const myId = user?.uid
+            const q = query(collection(db, 'chats'), where('isGroup', '==', false))
+            const snap = await getDocs(q)
+            const existing = snap.docs.find(d => {
+              const m = d.data().members || []
+              return m.includes(myId) && m.includes(otherId)
+            })
+            let chatId
+            if (existing) {
+              chatId = existing.id
+            } else {
+              const ref = await addDoc(collection(db, 'chats'), {
+                name: otherName, members: [myId, otherId],
+                isGroup: false, createdAt: serverTimestamp(),
+                lastMessage: '', lastAt: serverTimestamp(),
+              })
+              chatId = ref.id
+            }
+            setShowDMPicker(false)
+            setShowList(false)
+            setActiveChat(chatId)
+          }}
+        />
+      )}
     </div>
   )
 
@@ -295,6 +351,11 @@ export default function ChatView() {
           <p className="text-sm font-bold text-primary truncate">{activeChat?.name}</p>
           <p className="text-xs text-dim">{activeChat?.isGroup ? `${activeChat?.members?.length || 0} members` : 'Direct message'}</p>
         </div>
+        {(activeChat?.createdBy === user?.uid || !activeChat?.createdBy) && (
+          <button onClick={() => { if (window.confirm('Delete this chat?')) { deleteChat(activeChat?.id); setShowList(true) } }}
+            className="w-8 h-8 rounded-xl hover:bg-danger-soft border border-app flex items-center justify-center text-danger cursor-pointer bg-transparent"
+            title="Delete chat">🗑</button>
+        )}
       </div>
 
       {/* Messages */}
@@ -311,7 +372,8 @@ export default function ChatView() {
             <Bubble key={msg.id} msg={msg} isMine={isMine}
               onReact={(emoji) => addReaction(activeChatId, msg.id, emoji, user?.uid)}
               onReply={() => { setReplyTo(msg); inputRef.current?.focus() }}
-              onForward={() => setForwardMsg(msg)} />
+              onForward={() => setForwardMsg(msg)}
+              onDelete={() => deleteMessage(activeChatId, msg.id)} />
           )
         })}
       </div>
@@ -401,53 +463,23 @@ export default function ChatView() {
         </div>
       )}
 
-      {/* DM Picker */}
-      {showDMPicker && (
-        <DMPicker
-          chats={chats}
-          onClose={() => setShowDMPicker(false)}
-          onStartDM={async (otherId, otherName) => {
-            const { addDoc, collection, query, where, getDocs, serverTimestamp } = await import('firebase/firestore')
-            const { db } = await import('../../utils/firebase')
-            const myId = user?.uid
-            // Check for existing DM
-            const q = query(collection(db, 'chats'), where('isGroup', '==', false))
-            const snap = await getDocs(q)
-            const existing = snap.docs.find(d => {
-              const m = d.data().members || []
-              return m.includes(myId) && m.includes(otherId)
-            })
-            let chatId
-            if (existing) {
-              chatId = existing.id
-            } else {
-              const ref = await addDoc(collection(db, 'chats'), {
-                name: otherName, members: [myId, otherId],
-                isGroup: false, createdAt: serverTimestamp(),
-                lastMessage: '', lastAt: serverTimestamp(),
-              })
-              chatId = ref.id
-            }
-            setShowDMPicker(false)
-            setShowList(false)
-            setActiveChat(chatId)
-          }}
-        />
-      )}
+
+
     </div>
   )
 }
 
 // ── DM Picker ─────────────────────────────────────────────────────────────────
-function DMPicker({ chats, onClose, onStartDM }) {
+function DMPicker({ chats, onClose, onStartDM, currentUserId }) {
   const [q, setQ]       = useState('')
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    import('firebase/firestore').then(({ collection, getDocs, query, where }) =>
+    import('firebase/firestore').then(({ collection, getDocs }) =>
       import('../../utils/firebase').then(({ db }) => {
-        getDocs(query(collection(db, 'users'), where('role', '==', 'teacher'))).then(snap => {
+        // Fetch ALL users so teachers can DM admins too
+        getDocs(collection(db, 'users')).then(snap => {
           setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })))
           setLoading(false)
         })
@@ -456,6 +488,7 @@ function DMPicker({ chats, onClose, onStartDM }) {
   }, [])
 
   const filtered = users.filter(u =>
+    u.id !== currentUserId &&
     `${u.firstName} ${u.lastName}`.toLowerCase().includes(q.toLowerCase())
   )
 
@@ -484,9 +517,16 @@ function DMPicker({ chats, onClose, onStartDM }) {
                 style={{ background: u.color || 'var(--accent)' }}>
                 {u.firstName?.[0]}{u.lastName?.[0]}
               </div>
-              <div>
-                <p className="text-sm font-semibold text-primary">{u.firstName} {u.lastName}</p>
-                <p className="text-xs text-dim capitalize">{u.role || 'teacher'}</p>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-semibold text-primary">{u.firstName} {u.lastName}</p>
+                  {['owner','admin'].includes(u.role) && (
+                    <span className="text-xs px-1.5 py-0.5 rounded-md bg-accent-soft text-accent font-semibold">
+                      {u.role === 'owner' ? '👑' : '🛡️'} {u.role}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-dim capitalize">{u.role === 'teacher' ? 'Teacher' : ''}</p>
               </div>
             </button>
           ))}

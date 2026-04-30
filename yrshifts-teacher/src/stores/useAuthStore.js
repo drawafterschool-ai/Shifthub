@@ -8,72 +8,81 @@ const useAuthStore = create((set, get) => ({
   userProfile:    null,
   loading:        true,
   profileMissing: false,
-  _unsubs:        [],
+  _profileUnsub:  null,   // only the profile listener — kept separate
+  _authUnsub:     null,   // the auth listener — must stay alive permanently
 
   init() {
+    // Guard: only init once
+    if (get()._authUnsub) return
+
     const unsubAuth = onAuthStateChanged(auth, (user) => {
+      // Cancel any previous profile listener when auth state changes
+      const prevUnsub = get()._profileUnsub
+      if (prevUnsub) { try { prevUnsub() } catch {} }
+      set({ _profileUnsub: null })
+
       if (!user) {
-        get()._cleanup()
+        // No user — show login screen, but keep the auth listener alive!
         set({ user: null, userProfile: null, loading: false, profileMissing: false })
         return
       }
 
-      // User is signed in — start profile listener
       set({ user, loading: true, profileMissing: false })
 
-      // Grace period: if Firestore hasn't responded in 6 seconds, show error
-      // (First login after account creation is the only time this matters)
+      // Hard timeout — if profile never arrives, show error
       const timer = setTimeout(() => {
-        if (get().loading) {
-          set({ loading: false, profileMissing: true })
-        }
-      }, 6000)
+        if (get().loading) set({ loading: false, profileMissing: true })
+      }, 8000)
 
-      const unsubProfile = onSnapshot(doc(db, 'users', user.uid), (snap) => {
-        clearTimeout(timer)
+      let retryTimer = null
 
-        if (snap.exists()) {
-          const profile = snap.data()
-          // Teacher app is teacher-only.
-          if (profile.role === 'admin') {
-            window.location.replace('/admin')
-            return
+      const startProfileListener = () => {
+        const unsub = onSnapshot(
+          doc(db, 'users', user.uid),
+          (snap) => {
+            if (snap.exists()) {
+              clearTimeout(timer)
+              clearTimeout(retryTimer)
+              const profile = snap.data()
+              if (profile.role === 'admin') { window.location.replace('/admin'); return }
+              if (profile.role !== 'teacher') {
+                fbSignOut(auth)
+                set({ userProfile: null, profileMissing: true, loading: false })
+                return
+              }
+              set({ userProfile: profile, profileMissing: false, loading: false })
+            } else {
+              // Doc doesn't exist yet — retry once after 1s (first-login race)
+              clearTimeout(retryTimer)
+              retryTimer = setTimeout(() => {
+                const currentUnsub = get()._profileUnsub
+                if (currentUnsub) { try { currentUnsub() } catch {} }
+                startProfileListener()
+              }, 1000)
+            }
+          },
+          (err) => {
+            clearTimeout(timer)
+            console.error('Profile listener error:', err)
+            set({ loading: false, profileMissing: true })
           }
-          if (profile.role !== 'teacher') {
-            fbSignOut(auth)
-            set({ userProfile: null, profileMissing: true, loading: false })
-            return
-          }
-          set({ userProfile: profile, profileMissing: false, loading: false })
-        } else {
-          // Doc doesn't exist yet — keep loading=true for the grace period
-          // (it will be created by the Cloud Function shortly)
-          // Only set profileMissing if we've already finished loading
-          if (!get().loading) {
-            set({ userProfile: null, profileMissing: true })
-          }
-          // else: timer will handle it after 6s if profile never arrives
-        }
-      }, (err) => {
-        clearTimeout(timer)
-        console.error('Profile listener error:', err)
-        set({ loading: false, profileMissing: true })
-      })
+        )
+        set({ _profileUnsub: unsub })
+      }
 
-      set(s => ({ _unsubs: [...s._unsubs, unsubProfile] }))
+      startProfileListener()
     })
 
-    set(s => ({ _unsubs: [...s._unsubs, unsubAuth] }))
+    set({ _authUnsub: unsubAuth })
   },
 
   signOut() {
-    get()._cleanup()
+    // Cancel profile listener only — auth listener must stay alive
+    // so onAuthStateChanged(null) fires and transitions to login screen
+    const profileUnsub = get()._profileUnsub
+    if (profileUnsub) { try { profileUnsub() } catch {} }
+    set({ _profileUnsub: null })
     fbSignOut(auth)
-  },
-
-  _cleanup() {
-    get()._unsubs.forEach(fn => { try { fn() } catch {} })
-    set({ _unsubs: [] })
   },
 }))
 

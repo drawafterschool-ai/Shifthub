@@ -14,11 +14,6 @@ const app = initializeApp({
 })
 
 export const db      = getFirestore(app)
-
-// Offline persistence — app loads from cache even without internet
-import('firebase/firestore').then(({ enableIndexedDbPersistence }) => {
-  enableIndexedDbPersistence(db).catch(() => {})
-})
 export const storage = getStorage(app)
 export const auth    = getAuth(app)
 

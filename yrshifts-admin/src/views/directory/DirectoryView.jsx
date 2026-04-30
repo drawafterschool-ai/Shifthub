@@ -3,6 +3,7 @@ import { useOutletContext }   from 'react-router-dom'
 import { httpsCallable } from 'firebase/functions'
 import { functions }     from '../../utils/firebase'
 import useDirectoryStore from '../../stores/useDirectoryStore'
+import useAuthStore      from '../../stores/useAuthStore'
 import { uid, formatPhone } from '../../utils/helpers'
 import Avatar  from '../../components/Avatar'
 import Button  from '../../components/Button'
@@ -19,6 +20,7 @@ function ColourPicker({ value, onChange }) {
           className="w-6 h-6 rounded-full border-2 cursor-pointer transition-transform hover:scale-110 flex-shrink-0"
           style={{ background: c, borderColor: value === c ? '#fff' : 'transparent' }} />
       ))}
+
     </div>
   )
 }
@@ -289,6 +291,9 @@ const COLS = [
 export default function DirectoryView() {
   const sms = useOutletContext()
   const { instructors, loading, updateInstructor, deleteInstructor } = useDirectoryStore()
+  const { userProfile: myProfile } = useAuthStore()
+  const canManageRoles = myProfile?.role === 'owner'
+  const [promoting, setPromoting] = useState(null)
 
   const [search,    setSearch]    = useState('')
   const [sel,       setSel]       = useState(new Set())
@@ -475,6 +480,13 @@ export default function DirectoryView() {
                         <button onClick={() => setInviting(inst)} title="Send invite"
                           className="text-dim hover:text-accent transition-colors cursor-pointer bg-transparent border-none text-base">📧</button>
                       )}
+                      {canManageRoles && (
+                        <button onClick={() => setPromoting(inst)}
+                          title="Change role"
+                          className="text-dim hover:text-accent transition-colors cursor-pointer bg-transparent border-none text-base">
+                          🔑
+                        </button>
+                      )}
                       <button onClick={() => setConfirmDel(inst.id)}
                         className="text-dim hover:text-danger transition-colors cursor-pointer bg-transparent border-none text-base">🗑</button>
                     </div>
@@ -516,6 +528,53 @@ export default function DirectoryView() {
           </ModalFooter>
         </Modal>
       )}
+
+      {/* Role management modal — owners only */}
+      {promoting && canManageRoles && (
+        <Modal onClose={() => setPromoting(null)} width="max-w-sm" zIndex="z-[3500]">
+          <ModalHeader title="Change role" onClose={() => setPromoting(null)} />
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-3 p-3 bg-raised rounded-xl border border-app">
+              <Avatar firstName={promoting.firstName} lastName={promoting.lastName}
+                color={promoting.color} photo={promoting.photo} size={40} />
+              <div>
+                <p className="text-sm font-bold text-primary">{promoting.firstName} {promoting.lastName}</p>
+                <p className="text-xs text-muted">{promoting.email}</p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              {[
+                { role: 'owner',   icon: '👑', label: 'Owner',   desc: 'Full access + can manage roles' },
+                { role: 'admin',   icon: '🛡️', label: 'Admin',   desc: 'Full access, cannot manage roles' },
+                { role: 'manager', icon: '📋', label: 'Manager', desc: 'Schedule + Directory + Chat only' },
+                { role: 'teacher', icon: '👤', label: 'Teacher', desc: 'Teacher app only' },
+              ].map(opt => (
+                <button key={opt.role}
+                  onClick={async () => {
+                    await updateInstructor(promoting.id, { role: opt.role })
+                    setPromoting(null)
+                  }}
+                  className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer text-left w-full transition-colors
+                    ${promoting.role === opt.role
+                      ? 'bg-accent-soft border-accent/40'
+                      : 'bg-card border-app hover:bg-raised'}`}>
+                  <span className="text-xl">{opt.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-primary">{opt.label}
+                      {promoting.role === opt.role && <span className="ml-2 text-xs text-accent font-normal">(current)</span>}
+                    </p>
+                    <p className="text-xs text-muted">{opt.desc}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+          <ModalFooter>
+            <Button onClick={() => setPromoting(null)}>Cancel</Button>
+          </ModalFooter>
+        </Modal>
+      )}
+
     </div>
   )
 }

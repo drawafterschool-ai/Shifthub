@@ -3,6 +3,22 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- PWA -->
+    <link rel="manifest" href="/admin/manifest.json" />
+    <meta name="theme-color" content="#181B25" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- iOS PWA -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="ShiftHub Admin" />
+    <link rel="apple-touch-icon" href="/yr_logo.jpg" />
+
+    <!-- Tile (Windows) -->
+    <meta name="msapplication-TileColor" content="#181B25" />
+    <meta name="msapplication-TileImage" content="/yr_logo.jpg" />
+
     <link rel="icon" type="image/jpeg" href="/yr_logo.jpg" />
     <title>ShiftHub Admin</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -12,5 +28,14 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    <script>
+      // Register service worker
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/admin/sw.js', { scope: '/admin/' })
+            .catch(err => console.log('SW registration failed:', err))
+        })
+      }
+    </script>
   </body>
 </html>

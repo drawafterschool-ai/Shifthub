@@ -1,22 +1,32 @@
 import { useState }                       from 'react'
 import { useNavigate }                     from 'react-router-dom'
 import { signInWithEmailAndPassword }      from 'firebase/auth'
+import { useEffect }                       from 'react'
+import useAuthStore                        from '../stores/useAuthStore'
 import { auth }                            from '../utils/firebase'
 
 export default function LoginView() {
+  const navigate = useNavigate()
+  const { user, userProfile, loading: authLoading } = useAuthStore()
+
+  // When auth state resolves with a logged-in user, navigate away
+  useEffect(() => {
+    if (!authLoading && user && userProfile) {
+      navigate('/schedule', { replace: true })
+    }
+  }, [authLoading, user, userProfile, navigate])
+
   const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')
   const [error,    setError]    = useState('')
   const [loading,  setLoading]  = useState(false)
-  const navigate = useNavigate()
-
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
     setLoading(true)
     try {
       await signInWithEmailAndPassword(auth, email, password)
-      navigate('/schedule', { replace: true })
+      // useEffect above will navigate once auth state resolves
     } catch (err) {
       setError(err.message.replace('Firebase:', '').trim())
     } finally {

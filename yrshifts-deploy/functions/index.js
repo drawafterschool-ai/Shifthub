@@ -13,9 +13,77 @@ setGlobalOptions({ region: 'us-central1' })
 const EMAIL_SECRETS = ['SMTP_USER', 'SMTP_PASS']
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ICS CALENDAR FILE GENERATOR
+// ─────────────────────────────────────────────────────────────────────────────
+function generateICS(shift) {
+  // Parse date and times into UTC format for ICS
+  const parseDateTime = (dateStr, timeStr) => {
+    if (!dateStr || !timeStr) return null
+    try {
+      // Handles: "2:00 PM", "2:00PM", "02:15pm", "14:00"
+      const m = timeStr.match(/(\d+):(\d+)\s*(am|pm)?/i)
+      if (!m) return null
+      let h = parseInt(m[1])
+      const min = parseInt(m[2])
+      const period = (m[3] || '').toUpperCase()
+      if (period === 'PM' && h !== 12) h += 12
+      if (period === 'AM' && h === 12) h = 0
+      // Date can be YYYY-MM-DD or MM/DD/YYYY
+      let year, month, day
+      if (dateStr.includes('-')) {
+        ;[year, month, day] = dateStr.split('-').map(Number)
+      } else if (dateStr.includes('/')) {
+        ;[month, day, year] = dateStr.split('/').map(Number)
+      } else { return null }
+      return `${year}${String(month).padStart(2,'0')}${String(day).padStart(2,'0')}T${String(h).padStart(2,'0')}${String(min).padStart(2,'0')}00`
+    } catch { return null }
+  }
+
+  const dtStart = parseDateTime(shift.date, shift.start)
+  const dtEnd   = parseDateTime(shift.date, shift.end)
+  if (!dtStart || !dtEnd) return null
+
+  const uid     = `shift-${shift.id || Date.now()}@yrshifts.web.app`
+  const summary = (shift.title || 'Shift').replace(/[\n\r]/g, ' ')
+  const location = (shift.address || '').replace(/[\n\r]/g, ' ')
+  const desc    = [
+    shift.title  || 'Shift',
+    shift.start && shift.end ? `${shift.start} – ${shift.end}` : '',
+    shift.students ? `Students: ${shift.students}` : '',
+    shift.address  ? `Location: ${shift.address}`  : '',
+    shift.note     ? `Note: ${shift.note}`          : '',
+    '',
+    'Open ShiftHub: https://yrshifts.web.app/app',
+  ].filter(Boolean).join('\n')
+
+  return [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//ShiftHub//YRShifts//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:REQUEST',
+    'BEGIN:VEVENT',
+    `UID:${uid}`,
+    `DTSTART;TZID=America/Chicago:${dtStart}`,
+    `DTEND;TZID=America/Chicago:${dtEnd}`,
+    `SUMMARY:${summary}`,
+    location ? `LOCATION:${location}` : '',
+    `DESCRIPTION:${desc.replace(/\n/g, '\\n')}`,
+    `STATUS:CONFIRMED`,
+    `BEGIN:VALARM`,
+    `TRIGGER:-PT24H`,
+    `ACTION:DISPLAY`,
+    `DESCRIPTION:Reminder: ${summary} tomorrow`,
+    `END:VALARM`,
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ].filter(l => l !== '').join('\r\n')
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // SHARED DELIVERY — FCM push + email + SMS
 // ─────────────────────────────────────────────────────────────────────────────
-async function deliver(user, subject, body) {
+async function deliver(user, subject, body, icsContent) {
   const results = { push: false, email: false, sms: false }
 
 
@@ -169,8 +237,11 @@ exports.onShiftChanged = onDocumentWritten('shifts/{shiftId}', async (event) => 
     if (!snap.exists) return
     const user    = { id: nowAssigned, ...snap.data() }
     const subject = `New shift assigned — ${after.date}`
-    const body    = `Hi ${user.firstName || 'there'},\n\nYou have a new shift:\n\n  📅 ${after.date}\n  🕐 ${after.start} – ${after.end}\n  📚 ${after.title || 'Shift'}${after.address ? `\n  📍 ${after.address}` : ''}${after.note ? `\n  📝 ${after.note}` : ''}\n\nPlease confirm or reject in the app.\n\nhttps://yrshifts.web.app/app`
-    await deliver(user, subject, body)
+    const body    = `Hi ${user.firstName || 'there'},\n\nYou have a new shift:\n\n  📅 ${after.date}\n  🕐 ${after.start} – ${after.end}\n  📚 ${after.title || 'Shift'}${after.address ? `\n  📍 ${after.address}` : ''}${after.note ? `\n  📝 ${after.note}` : ''}\n\nThe calendar invite is attached — tap it to add to your calendar.\n\nhttps://yrshifts.web.app/app`
+    const ics = generateICS({ ...after, id: event.params.shiftId })
+    console.log('ICS generated:', ics ? 'YES ('+ics.length+' chars)' : 'FAILED - null returned')
+    console.log('Shift data for ICS:', JSON.stringify({ date: after.date, start: after.start, end: after.end, title: after.title }))
+    await deliver(user, subject, body, ics)
     return
   }
 
@@ -179,13 +250,14 @@ exports.onShiftChanged = onDocumentWritten('shifts/{shiftId}', async (event) => 
     const changed = ['date','start','end','title','address','note'].filter(
       f => JSON.stringify(before[f]) !== JSON.stringify(after[f])
     )
-    if (!changed.length) return  // no meaningful change
+    if (!changed.length) return
     const snap = await db.collection('users').doc(nowAssigned).get()
     if (!snap.exists) return
     const user    = { id: nowAssigned, ...snap.data() }
     const subject = `Shift updated — ${after.date}`
-    const body    = `Hi ${user.firstName || 'there'},\n\nYour shift has been updated:\n\n  📅 ${after.date}\n  🕐 ${after.start} – ${after.end}\n  📚 ${after.title || 'Shift'}${after.address ? `\n  📍 ${after.address}` : ''}${after.note ? `\n  📝 ${after.note}` : ''}\n\nChanged: ${changed.join(', ')}\n\nhttps://yrshifts.web.app/app`
-    await deliver(user, subject, body)
+    const body    = `Hi ${user.firstName || 'there'},\n\nYour shift has been updated:\n\n  📅 ${after.date}\n  🕐 ${after.start} – ${after.end}\n  📚 ${after.title || 'Shift'}${after.address ? `\n  📍 ${after.address}` : ''}${after.note ? `\n  📝 ${after.note}` : ''}\n\nChanged: ${changed.join(', ')}\n\nUpdated calendar invite attached.\n\nhttps://yrshifts.web.app/app`
+    const ics = generateICS({ ...after, id: event.params.shiftId })
+    await deliver(user, subject, body, ics)
   }
 })
 
@@ -251,6 +323,38 @@ exports.onBuzzPostCreated = onDocumentCreated('weekly_buzz/{postId}', async (eve
 // ─────────────────────────────────────────────────────────────────────────────
 // 7. 24-HOUR REMINDER — daily at 8 AM Central
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// CHAT MESSAGE — notify chat members when a new message is sent
+// ─────────────────────────────────────────────────────────────────────────────
+exports.onChatMessageCreated = onDocumentCreated(
+  { document: 'chats/{chatId}/messages/{msgId}', secrets: EMAIL_SECRETS },
+  async (event) => {
+    const msg    = event.data?.data()
+    if (!msg) return
+    const chatId = event.params.chatId
+
+    // Get the chat to find members
+    const chatSnap = await db.collection('chats').doc(chatId).get()
+    if (!chatSnap.exists) return
+    const chat = chatSnap.data()
+    const members = chat.members || []
+
+    // Notify all members except the sender
+    for (const memberId of members) {
+      if (memberId === msg.authorId) continue
+      const uSnap = await db.collection('users').doc(memberId).get()
+      if (!uSnap.exists) continue
+      const user    = { id: memberId, ...uSnap.data() }
+      const isGroup = chat.isGroup
+      const subject = isGroup
+        ? `💬 New message in ${chat.name || 'group chat'}`
+        : `💬 New message from ${msg.authorName || 'your colleague'}`
+      const body = `${msg.authorName || 'Someone'}: ${msg.text || '📎 Attachment'}\n\nhttps://yrshifts.web.app/app`
+      await deliver(user, subject, body)
+    }
+  }
+)
+
 exports.sendDayBeforeReminders = onSchedule(
   { schedule: '0 9 * * *', timeZone: 'America/Chicago' },
   async () => {
@@ -334,13 +438,90 @@ exports.sendTwoHourReminders = onSchedule(
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 10. UNCONFIRMED SHIFT ALERT — notify owner 5 hours before shift start
+// ─────────────────────────────────────────────────────────────────────────────
+exports.sendUnconfirmedAlerts = onSchedule(
+  { schedule: '*/30 * * * *', timeZone: 'America/Chicago', secrets: EMAIL_SECRETS },
+  async () => {
+    const now      = new Date()
+    const todayKey = now.toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })
+    const central  = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Chicago', hour: 'numeric', minute: 'numeric', hour12: false,
+    }).format(now)
+    const [hStr, mStr] = central.split(':')
+    const nowMins  = parseInt(hStr) * 60 + parseInt(mStr)
+    // Window: shifts starting in 4h30m–5h30m from now
+    const winMin   = nowMins + 270
+    const winMax   = nowMins + 330
+
+    const snap = await db.collection('shifts')
+      .where('date', '==', todayKey)
+      .where('status', '==', 'published')
+      .get()
+
+    // Find all owners to notify
+    const ownersSnap = await db.collection('users').where('role', '==', 'owner').get()
+    const owners = ownersSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+    if (!owners.length) return
+
+    let sent = 0
+    for (const shiftDoc of snap.docs) {
+      const shift = shiftDoc.data()
+      if (!shift.instructorId || shift.claimable) continue
+      // Only alert if teacher hasn't confirmed or rejected
+      if (shift.confirmationStatus === 'confirmed' || shift.confirmationStatus === 'rejected') continue
+      const startMins = parseShiftTime(shift.start)
+      if (startMins < 0 || startMins < winMin || startMins > winMax) continue
+
+      // De-duplicate — only send once per shift
+      const alertRef = db.collection('reminders').doc(`${shiftDoc.id}-unconfirmed`)
+      if ((await alertRef.get()).exists) continue
+
+      // Get teacher name
+      const tSnap = await db.collection('users').doc(shift.instructorId).get()
+      const teacherName = tSnap.exists ? `${tSnap.data().firstName} ${tSnap.data().lastName}` : 'A teacher'
+
+      // Notify all owners
+      for (const owner of owners) {
+        await deliver(owner,
+          `⚠️ Shift unconfirmed — ${shift.title || 'Shift'} at ${shift.start}`,
+          `Hi ${owner.firstName || 'there'},\n\n${teacherName} has not confirmed or rejected their shift starting in ~5 hours:\n\n  📅 ${shift.date}\n  🕐 ${shift.start} – ${shift.end}\n  📚 ${shift.title || 'Shift'}${shift.address ? `\n  📍 ${shift.address}` : ''}\n\nYou may want to follow up or reassign.\n\nhttps://yrshifts.web.app/admin`
+        )
+      }
+
+      // Also create an in-app notification
+      await db.collection('notifications').add({
+        type:        'shift_unconfirmed',
+        forAdmin:    true,
+        recipientId: 'admin',
+        actorName:   teacherName,
+        shiftId:     shiftDoc.id,
+        shiftDate:   shift.date,
+        shiftStart:  shift.start,
+        shiftTitle:  shift.title || 'Shift',
+        message:     `${teacherName} has not confirmed their shift at ${shift.start}`,
+        status:      'unread',
+        createdAt:   admin.firestore.FieldValue.serverTimestamp(),
+      })
+
+      await alertRef.set({
+        shiftId: shiftDoc.id, instructorId: shift.instructorId,
+        type: 'unconfirmed', sentAt: admin.firestore.FieldValue.serverTimestamp(),
+      })
+      sent++
+    }
+    console.log(`Unconfirmed alerts: ${sent} sent`)
+  }
+)
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 9. CREATE TEACHER ACCOUNT (callable)
 // ─────────────────────────────────────────────────────────────────────────────
 exports.createTeacherAccount = onCall({ enforceAppCheck: false, secrets: EMAIL_SECRETS }, async (request) => {
   const callerUid = request.auth?.uid
   if (!callerUid) throw new HttpsError('unauthenticated', 'Must be signed in')
   const callerSnap = await db.collection('users').doc(callerUid).get()
-  if (!callerSnap.exists || callerSnap.data().role !== 'admin') {
+  if (!callerSnap.exists || !['admin','owner'].includes(callerSnap.data().role)) {
     throw new HttpsError('permission-denied', 'Admin only')
   }
 

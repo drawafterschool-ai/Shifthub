@@ -29,9 +29,27 @@ function EventModal({ existing, onClose, onSave }) {
   const [title,    setTitle]    = useState(existing?.title    || '')
   const [date,     setDate]     = useState(existing?.date     || '')
   const [time,     setTime]     = useState(existing?.time     || '')
-  const [location, setLocation] = useState(existing?.location || '')
+  const [location,   setLocation]   = useState(existing?.location || '')
+  const [locSugs,    setLocSugs]    = useState([])
+  const [showLocSug, setShowLocSug] = useState(false)
+  const locTimer = useRef(null)
   const [notes,    setNotes]    = useState(existing?.notes    || '')
   const [busy,     setBusy]     = useState(false)
+
+  const handleLocationChange = (e) => {
+    const val = e.target.value
+    setLocation(val)
+    setShowLocSug(true)
+    clearTimeout(locTimer.current)
+    if (val.length < 3) { setLocSugs([]); return }
+    locTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(val)}&limit=5&countrycodes=us`)
+        const data = await res.json()
+        setLocSugs(data)
+      } catch { setLocSugs([]) }
+    }, 400)
+  }
 
   const handleSave = async () => {
     if (!title.trim() || !date) return
@@ -61,7 +79,21 @@ function EventModal({ existing, onClose, onSave }) {
         </div>
         <div>
           <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1.5">Location</label>
-          <input value={location} onChange={e => setLocation(e.target.value)} className={INPUT} placeholder="Address or Zoom link" />
+          <div className="relative">
+            <input value={location} onChange={handleLocationChange}
+              onBlur={() => setTimeout(() => setShowLocSug(false), 200)}
+              className={INPUT} placeholder="Address or Zoom link" autoComplete="off" />
+            {showLocSug && locSugs.length > 0 && (
+              <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-card border border-app rounded-xl shadow-xl overflow-hidden">
+                {locSugs.map((s, i) => (
+                  <div key={i} onClick={() => { setLocation(s.display_name); setShowLocSug(false) }}
+                    className="px-3 py-2.5 text-sm text-primary cursor-pointer hover:bg-raised truncate border-b border-app/40 last:border-0">
+                    📍 {s.display_name}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
         <div>
           <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1.5">Notes</label>

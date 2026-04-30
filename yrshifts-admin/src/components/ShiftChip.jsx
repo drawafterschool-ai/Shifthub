@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import useScheduleStore from '../stores/useScheduleStore'
 
 // Convert hex to rgba
@@ -21,6 +21,16 @@ export default function ShiftChip({
   const [menuOpen,   setMenuOpen]   = useState(false)
   const [multiOpen,  setMultiOpen]  = useState(false)
   const [confirmDel, setConfirmDel] = useState(false)
+  const [menuUp,     setMenuUp]     = useState(false)
+  const chipRef = useRef(null)
+
+  // When menu opens, check if it would go off-screen and flip upward
+  useEffect(() => {
+    if (!menuOpen || !chipRef.current) return
+    const rect = chipRef.current.getBoundingClientRect()
+    const spaceBelow = window.innerHeight - rect.bottom
+    setMenuUp(spaceBelow < 200)
+  }, [menuOpen])
 
   const job      = jobs?.find(j => j.id === shift.job)
   const isClaim  = shift.claimable && isUnassigned
@@ -66,6 +76,7 @@ export default function ShiftChip({
 
   return (
     <div
+      ref={chipRef}
       draggable={!menuOpen}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
@@ -113,7 +124,7 @@ export default function ShiftChip({
           <div onClick={e => { e.stopPropagation(); closeMenu() }} className="fixed inset-0 z-40" />
           <div
             onClick={e => e.stopPropagation()}
-            className="absolute top-full left-0 z-50 mt-1 bg-card border border-app rounded-xl shadow-xl min-w-[170px] overflow-hidden animate-fade-in"
+            className={`absolute z-50 bg-card border border-app rounded-xl shadow-xl min-w-[170px] overflow-hidden animate-fade-in ${menuUp ? 'bottom-full mb-1' : 'top-full mt-1'} left-0`}
           >
             <button onClick={() => { onDuplicate(shift); closeMenu() }} className={menuBtn}>📋 Duplicate</button>
 

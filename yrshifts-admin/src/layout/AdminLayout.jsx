@@ -6,15 +6,16 @@ import useNotificationsStore from '../stores/useNotificationsStore'
 import { SmsToasts }         from '../hooks/useSms'
 import { useSms }            from '../hooks/useSms'
 
+// roles that can see each nav item (undefined = all admin roles)
 const NAV = [
-  { to: 'schedule',      icon: '📅', label: 'Schedule'        },
-  { to: 'directory',     icon: '📇', label: 'Directory'       },
-  { to: 'chat',          icon: '💬', label: 'Chat'            },
-  { to: 'knowledge',     icon: '📚', label: 'Knowledge Base'  },
-  { to: 'buzz',          icon: '📢', label: 'Weekly Buzz'     },
-    { to: 'events',        icon: '🗓️', label: 'Events'          },
+  { to: 'schedule',      icon: '📅', label: 'Schedule'       },
+  { to: 'directory',     icon: '📇', label: 'Directory'      },
+  { to: 'chat',          icon: '💬', label: 'Chat'           },
+  { to: 'knowledge',     icon: '📚', label: 'Knowledge Base', roles: ['owner','admin'] },
+  { to: 'buzz',          icon: '📢', label: 'Weekly Buzz',    roles: ['owner','admin'] },
+  { to: 'events',        icon: '🗓️', label: 'Events',         roles: ['owner','admin'] },
   { to: 'notifications', icon: '🔔', label: 'Notifications',  badge: true },
-  { to: 'settings',      icon: '⚙️',  label: 'Settings'       },
+  { to: 'settings',      icon: '⚙️',  label: 'Settings',      roles: ['owner','admin'] },
 ]
 
 const THEMES = ['dark', 'light']
@@ -77,7 +78,10 @@ export default function AdminLayout() {
 
         {/* Nav */}
         <nav className="flex-1 py-2 px-1.5 flex flex-col gap-0.5 overflow-y-auto">
-          {NAV.map(item => (
+          {NAV.filter(item => {
+            if (!item.roles) return true  // visible to all admin roles
+            return item.roles.includes(userProfile?.role)
+          }).map(item => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -122,7 +126,10 @@ export default function AdminLayout() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-semibold text-primary truncate">{userProfile.firstName}</p>
-                <p className="text-2xs text-dim capitalize">{userProfile.role}</p>
+                <p className="text-2xs font-semibold capitalize" style={{
+                  color: userProfile.role === 'owner' ? '#FBBF24' :
+                         userProfile.role === 'manager' ? '#A78BFA' : 'var(--accent)'
+                }}>{userProfile.role || 'admin'}</p>
               </div>
             </div>
           )}

@@ -10,7 +10,12 @@ const useDirectoryStore = create((set, get) => ({
   init() {
     const unsub = onSnapshot(collection(db, 'users'), (snap) => {
       set({
-        instructors: snap.docs.map(d => ({ id: d.id, ...d.data() })),
+        instructors: snap.docs.map(d => ({ id: d.id, ...d.data() }))
+                              .sort((a, b) => {
+                                const nameA = `${a.firstName} ${a.lastName}`.toLowerCase()
+                                const nameB = `${b.firstName} ${b.lastName}`.toLowerCase()
+                                return nameA.localeCompare(nameB)
+                              }),
         loading: false,
       })
     })
