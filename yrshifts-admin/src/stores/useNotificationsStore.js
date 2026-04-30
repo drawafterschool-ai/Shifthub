@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { collection, onSnapshot, query, where, orderBy, limit } from 'firebase/firestore'
+import { collection, onSnapshot, query, where, orderBy, limit, writeBatch, doc, updateDoc } from 'firebase/firestore'
 import { db }                        from '../utils/firebase'
 import { markRead, markAllRead }     from '../utils/notifications'
 
@@ -50,6 +50,29 @@ const useNotificationsStore = create((set, get) => ({
   markAllRead() {
     const ids = get().notifications.filter(n => n.status === 'unread').map(n => n.id)
     return markAllRead(ids)
+  },
+  async clearAllPending() {
+    const pending = get().notifications.filter(n => n.status === 'unread')
+    if (!pending.length) return
+    const batch = writeBatch(db)
+    pending.forEach(n => batch.update(doc(db, 'notifications', n.id), { status: 'read' }))
+    await batch.commit()
+  },
+
+  // Ignore a single notification — marks it read and flags it as ignored
+  async ignoreNotif(id) {
+    await updateDoc(doc(db, 'notifications', id), { status: 'read', ignored: true })
+  },
+
+  // Ignore all pending (rejected/claimed) notifications
+  async ignoreAll() {
+    const pending = get().notifications.filter(n =>
+      ['shift_rejected', 'shift_claimed', 'shift_unconfirmed'].includes(n.type)
+    )
+    if (!pending.length) return
+    const batch = writeBatch(db)
+    pending.forEach(n => batch.update(doc(db, 'notifications', n.id), { status: 'read', ignored: true }))
+    await batch.commit()
   },
 }))
 

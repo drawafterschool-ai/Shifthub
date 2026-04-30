@@ -38,7 +38,7 @@ export default function MobileLayout() {
   }
 
   return (
-    <div className="w-screen h-screen flex flex-col overflow-hidden bg-app">
+    <div className="bg-app flex flex-col overflow-hidden" style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0 }}>
 
       {/* Top bar */}
       <div className="flex items-center justify-between px-4 py-3 bg-surface border-b border-app flex-shrink-0"

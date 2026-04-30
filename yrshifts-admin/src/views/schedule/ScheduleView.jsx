@@ -5,6 +5,7 @@ import useScheduleStore  from '../../stores/useScheduleStore'
 import useDirectoryStore from '../../stores/useDirectoryStore'
 
 import { DAYS, toKey, getWeekDates, getMonthDates, fmtDate, isToday } from '../../utils/date'
+import { calcHours } from '../../utils/time'
 import { makeShift, UNASSIGNED } from '../../utils/schedule'
 import { exportCSV }             from '../../utils/exportCSV'
 
@@ -256,8 +257,9 @@ export default function ScheduleView() {
               })}
             </div>
 
-            {/* Unassigned row */}
-            <div className="grid grid-cols-schedule gap-1 py-0.5 mb-0.5 bg-surface rounded-lg border-b border-app">
+            {/* Unassigned row — sticky below the day headers */}
+            <div className="grid grid-cols-schedule gap-1 py-0.5 mb-0.5 bg-surface rounded-lg border-b border-app"
+              style={{ position: 'sticky', top: 68, zIndex: 9 }}>
               <div className="flex items-center gap-1 px-1.5">
                 <span className="text-xs flex-shrink-0">📋</span>
                 <p className="text-[11px] font-bold text-muted leading-tight truncate">Unassigned</p>
@@ -322,7 +324,7 @@ export default function ScheduleView() {
       )}
       {pendingDrop && <ConfirmDropModal drop={pendingDrop} instructors={instructors} onClose={() => setPendingDrop(null)} onConfirm={confirmDrop} />}
       {deletingShift && <DeleteScopeModal onClose={() => setDeletingShift(null)} onConfirm={executeGridDelete} />}
-      {ctx && <ShiftPanel shift={ctx.shift} dateKey={ctx.dateKey} isNew={ctx.isNew} onClose={() => setCtx(null)} onSaved={(msg) => { setCtx(null); showToast(msg) }} sms={sms} />}
+      {ctx && <ShiftPanel shift={ctx.shift} dateKey={ctx.dateKey} isNew={ctx.isNew} onClose={() => setCtx(null)} onSaved={(msg) => { showToast(msg) }} sms={sms} />}
 
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 px-5 py-2.5 bg-card border border-app text-primary text-sm font-semibold rounded-xl shadow-xl z-[9999] animate-fade-in whitespace-nowrap">

@@ -17,20 +17,34 @@ const EMOJI_GROUPS = [
 ]
 
 // ── Rich text editor ───────────────────────────────────────────────────────────
+const TEXT_COLORS = [
+  { label: 'Default', value: '' },
+  { label: 'White',   value: '#ffffff' },
+  { label: 'Black',   value: '#1a1a2e' },
+  { label: 'Blue',    value: '#4EA8D6' },
+  { label: 'Green',   value: '#34D399' },
+  { label: 'Red',     value: '#F87171' },
+  { label: 'Yellow',  value: '#FBBF24' },
+  { label: 'Purple',  value: '#A78BFA' },
+]
+
 function RichEditor({ value, onChange }) {
   const editorRef    = useRef(null)
   const initialised  = useRef(false)
-  const [showEmoji,  setShowEmoji]  = useState(false)
-  const [showLink,   setShowLink]   = useState(false)
+  const [showEmoji,      setShowEmoji]      = useState(false)
+  const [showLink,       setShowLink]       = useState(false)
+  const [showColorPick,  setShowColorPick]  = useState(false)
   const [linkUrl,    setLinkUrl]    = useState('https://')
   const [linkText,   setLinkText]   = useState('')
   const savedRange   = useRef(null)
 
-  // Initialise content once
+  // Initialise content once — set center alignment by default for new posts
   useEffect(() => {
     if (!initialised.current && editorRef.current) {
       editorRef.current.innerHTML = value || ''
       initialised.current = true
+      // Default alignment: center
+      if (!value) document.execCommand('justifyCenter', false, undefined)
     }
   }, [])
 
@@ -74,37 +88,77 @@ function RichEditor({ value, onChange }) {
     onChange(editorRef.current?.innerHTML || '')
   }
 
+  const applyColor = (color) => {
+    restoreSelection()
+    editorRef.current?.focus()
+    if (color) {
+      document.execCommand('foreColor', false, color)
+    } else {
+      // Remove color — wrap in span with inherit
+      document.execCommand('foreColor', false, 'inherit')
+    }
+    setShowColorPick(false)
+    onChange(editorRef.current?.innerHTML || '')
+  }
+
   const TOOL_BTN = "px-2.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer bg-transparent border-none text-muted hover:bg-card hover:text-primary transition-colors"
 
   return (
     <div className="border border-app rounded-xl overflow-visible">
-      {/* Toolbar */}
-      <div className="flex gap-0.5 p-1.5 border-b border-app bg-raised flex-wrap items-center">
-        <button className={`${TOOL_BTN} font-bold`}         onMouseDown={e => { e.preventDefault(); exec('bold') }}>B</button>
-        <button className={`${TOOL_BTN} italic`}            onMouseDown={e => { e.preventDefault(); exec('italic') }}>I</button>
-        <button className={`${TOOL_BTN} underline`}         onMouseDown={e => { e.preventDefault(); exec('underline') }}>U</button>
-        <div className="w-px h-4 bg-app mx-0.5" />
-        <button className={TOOL_BTN}                        onMouseDown={e => {
-              e.preventDefault()
-              editorRef.current?.focus()
-              // Try execCommand first; if selection is already in a list it toggles off
-              const success = document.execCommand('insertUnorderedList', false, undefined)
-              if (!success) document.execCommand('insertHTML', false, '<ul><li></li></ul>')
+      {/* Toolbar — scrollable on narrow screens */}
+      <div className="flex gap-0.5 p-1.5 border-b border-app bg-raised items-center overflow-x-auto" style={{ flexWrap: 'nowrap', minWidth: 0 }}>
+        {/* Format */}
+        <button className={`${TOOL_BTN} font-bold flex-shrink-0`}   onMouseDown={e => { e.preventDefault(); exec('bold') }}>B</button>
+        <button className={`${TOOL_BTN} italic flex-shrink-0`}       onMouseDown={e => { e.preventDefault(); exec('italic') }}>I</button>
+        <button className={`${TOOL_BTN} underline flex-shrink-0`}    onMouseDown={e => { e.preventDefault(); exec('underline') }}>U</button>
+        <div className="w-px h-4 bg-app mx-0.5 flex-shrink-0" />
+        {/* Alignment */}
+        <button className={`${TOOL_BTN} flex-shrink-0`} title="Align left"   onMouseDown={e => { e.preventDefault(); exec('justifyLeft') }}>⬅</button>
+        <button className={`${TOOL_BTN} flex-shrink-0`} title="Center"       onMouseDown={e => { e.preventDefault(); exec('justifyCenter') }}>↔</button>
+        <button className={`${TOOL_BTN} flex-shrink-0`} title="Align right"  onMouseDown={e => { e.preventDefault(); exec('justifyRight') }}>➡</button>
+        <div className="w-px h-4 bg-app mx-0.5 flex-shrink-0" />
+        {/* Lists */}
+        <button className={`${TOOL_BTN} flex-shrink-0`} onMouseDown={e => {
+              e.preventDefault(); editorRef.current?.focus()
+              if (!document.execCommand('insertUnorderedList', false, undefined))
+                document.execCommand('insertHTML', false, '<ul><li></li></ul>')
             }}>•</button>
-        <button className={TOOL_BTN}                        onMouseDown={e => {
-              e.preventDefault()
-              editorRef.current?.focus()
-              const success = document.execCommand('insertOrderedList', false, undefined)
-              if (!success) document.execCommand('insertHTML', false, '<ol><li></li></ol>')
+        <button className={`${TOOL_BTN} flex-shrink-0`} onMouseDown={e => {
+              e.preventDefault(); editorRef.current?.focus()
+              if (!document.execCommand('insertOrderedList', false, undefined))
+                document.execCommand('insertHTML', false, '<ol><li></li></ol>')
             }}>1.</button>
-        <div className="w-px h-4 bg-app mx-0.5" />
-        {/* Link */}
-        <div className="relative">
+        <div className="w-px h-4 bg-app mx-0.5 flex-shrink-0" />
+        {/* Text color */}
+        <div className="relative flex-shrink-0">
           <button className={TOOL_BTN}
-            onMouseDown={e => { e.preventDefault(); saveSelection(); setShowLink(v => !v); setShowEmoji(false) }}
-            title="Insert link">
-            🔗
+            onMouseDown={e => { e.preventDefault(); saveSelection(); setShowColorPick(v => !v); setShowLink(false); setShowEmoji(false) }}
+            title="Text color">
+            <span style={{ borderBottom: '3px solid #4EA8D6' }}>A</span>
           </button>
+          {showColorPick && (
+            <>
+              <div onClick={() => setShowColorPick(false)} className="fixed inset-0 z-10" />
+              <div className="absolute top-full left-0 mt-1 z-20 bg-card border border-app rounded-xl p-3 shadow-xl w-48">
+                <p className="text-2xs text-dim uppercase tracking-wide font-semibold mb-2">Text color</p>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {TEXT_COLORS.map(c => (
+                    <button key={c.value} onClick={() => applyColor(c.value)}
+                      title={c.label}
+                      className="w-8 h-8 rounded-lg border-2 border-app cursor-pointer hover:scale-110 transition-transform flex-shrink-0"
+                      style={{ background: c.value || 'var(--text)', border: c.value === '' ? '2px solid var(--border)' : '2px solid transparent' }}
+                    />
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+        {/* Link */}
+        <div className="relative flex-shrink-0">
+          <button className={TOOL_BTN}
+            onMouseDown={e => { e.preventDefault(); saveSelection(); setShowLink(v => !v); setShowEmoji(false); setShowColorPick(false) }}
+            title="Insert link">🔗</button>
           {showLink && (
             <>
               <div onClick={() => setShowLink(false)} className="fixed inset-0 z-10" />
@@ -114,22 +168,18 @@ function RichEditor({ value, onChange }) {
                 <input value={linkUrl} onChange={e => setLinkUrl(e.target.value)} placeholder="https://…"
                   className="w-full bg-raised border border-app rounded-lg px-3 py-2 text-xs text-primary outline-none focus:border-accent" />
                 <div className="flex gap-2">
-                  <button onClick={() => setShowLink(false)}
-                    className="flex-1 py-1.5 rounded-lg border border-app text-xs text-muted cursor-pointer bg-transparent">Cancel</button>
-                  <button onClick={insertLink}
-                    className="flex-1 py-1.5 rounded-lg bg-accent text-white text-xs font-bold cursor-pointer border-none">Insert</button>
+                  <button onClick={() => setShowLink(false)} className="flex-1 py-1.5 rounded-lg border border-app text-xs text-muted cursor-pointer bg-transparent">Cancel</button>
+                  <button onClick={insertLink} className="flex-1 py-1.5 rounded-lg bg-accent text-white text-xs font-bold cursor-pointer border-none">Insert</button>
                 </div>
               </div>
             </>
           )}
         </div>
         {/* Emoji */}
-        <div className="relative">
+        <div className="relative flex-shrink-0">
           <button className={TOOL_BTN}
-            onMouseDown={e => { e.preventDefault(); saveSelection(); setShowEmoji(v => !v); setShowLink(false) }}
-            title="Insert emoji">
-            😊
-          </button>
+            onMouseDown={e => { e.preventDefault(); saveSelection(); setShowEmoji(v => !v); setShowLink(false); setShowColorPick(false) }}
+            title="Insert emoji">😊</button>
           {showEmoji && (
             <>
               <div onClick={() => setShowEmoji(false)} className="fixed inset-0 z-10" />
@@ -140,9 +190,7 @@ function RichEditor({ value, onChange }) {
                     <div className="flex flex-wrap gap-1">
                       {g.emojis.map(e => (
                         <button key={e} onClick={() => insertEmoji(e)}
-                          className="text-lg p-1 rounded hover:bg-raised cursor-pointer bg-transparent border-none transition-colors">
-                          {e}
-                        </button>
+                          className="text-lg p-1 rounded hover:bg-raised cursor-pointer bg-transparent border-none transition-colors">{e}</button>
                       ))}
                     </div>
                   </div>
@@ -153,17 +201,19 @@ function RichEditor({ value, onChange }) {
         </div>
       </div>
 
-      {/* Editable area */}
+      {/* Editable area — white text in dark mode via CSS var */}
       <div
         ref={editorRef}
         contentEditable suppressContentEditableWarning
         dir="ltr"
         onInput={e => onChange(e.currentTarget.innerHTML)}
-        className="min-h-[160px] px-4 py-3 text-sm text-primary outline-none max-w-none"
+        className="min-h-[160px] px-4 py-3 text-sm outline-none max-w-none"
         style={{
+          color: 'var(--text)',
           lineHeight: 1.7,
           direction: 'ltr',
           listStylePosition: 'inside',
+          textAlign: 'center',
         }}
       />
     </div>
@@ -188,7 +238,12 @@ function PostCard({ post, instructors, onEdit, onDelete, onRemind }) {
     <div className="bg-card border border-app rounded-2xl p-5">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex-1 min-w-0">
-          <h3 className="text-base font-bold text-primary truncate">{post.title}</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-bold text-primary truncate">{post.title}</h3>
+            {post.draft && (
+              <span className="px-1.5 py-0.5 rounded-md bg-warn-soft text-warn text-2xs font-bold uppercase flex-shrink-0">Draft</span>
+            )}
+          </div>
           <p className="text-xs text-dim mt-0.5">{d}</p>
         </div>
         <div className="flex items-center gap-1.5">
@@ -249,10 +304,10 @@ function ComposeModal({ existing, onClose, onSave }) {
   const [content, setContent] = useState(existing?.content || '')
   const [busy,    setBusy]    = useState(false)
 
-  const handleSave = async () => {
-    if (!title.trim() || !content.trim()) return
+  const handleSave = async (draft = false) => {
+    if (!title.trim()) return
     setBusy(true)
-    await onSave({ title: title.trim(), content })
+    await onSave({ title: title.trim(), content, draft })
     setBusy(false)
     onClose()
   }
@@ -260,7 +315,8 @@ function ComposeModal({ existing, onClose, onSave }) {
   return (
     <Modal onClose={onClose} width="max-w-2xl" zIndex="z-[1200]">
       <ModalHeader title={existing ? 'Edit post' : 'New Weekly Buzz post'} onClose={onClose} />
-      <div className="flex flex-col gap-4">
+      {/* Scrollable content area so buttons stay visible regardless of text length */}
+      <div className="flex flex-col gap-4 overflow-y-auto" style={{ maxHeight: '60vh' }}>
         <div>
           <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1.5">Title</label>
           <input value={title} onChange={e => setTitle(e.target.value)} autoFocus
@@ -274,8 +330,11 @@ function ComposeModal({ existing, onClose, onSave }) {
       </div>
       <ModalFooter>
         <Button onClick={onClose}>Cancel</Button>
-        <Button variant="primary" onClick={handleSave} disabled={busy || !title.trim() || !content.trim()}>
-          {busy ? 'Saving…' : existing ? 'Save changes' : 'Publish post'}
+        <Button onClick={() => handleSave(true)} disabled={busy || !title.trim()}>
+          {busy ? 'Saving…' : 'Save draft'}
+        </Button>
+        <Button variant="primary" onClick={() => handleSave(false)} disabled={busy || !title.trim()}>
+          {busy ? 'Publishing…' : existing ? 'Save changes' : 'Publish'}
         </Button>
       </ModalFooter>
     </Modal>
@@ -301,12 +360,15 @@ export default function WeeklyBuzzView() {
     return unsub
   }, [])
 
-  const handleSave = async ({ title, content }) => {
+  const handleSave = async ({ title, content, draft }) => {
     if (compose?.id) {
-      await updateDoc(doc(db, 'weekly_buzz', compose.id), { title, content, updatedAt: serverTimestamp() })
+      await updateDoc(doc(db, 'weekly_buzz', compose.id), {
+        title, content, draft: draft || false, updatedAt: serverTimestamp(),
+      })
     } else {
       await addDoc(collection(db, 'weekly_buzz'), {
         title, content, seenBy: [], likes: [], comments: [],
+        draft: draft || false,
         createdAt: serverTimestamp(),
         authorName: userProfile?.firstName || 'Admin',
       })

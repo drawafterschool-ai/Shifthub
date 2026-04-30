@@ -31,7 +31,7 @@ function fmtTime(ts) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-function NotifRow({ notif, onMarkRead, onNavigate }) {
+function NotifRow({ notif, onMarkRead, onNavigate, onIgnore }) {
   const isUnread = notif.status === 'unread'
   const icon     = NOTIF_ICONS[notif.type]  || '🔔'
   const color    = NOTIF_COLORS[notif.type] || 'text-muted'
@@ -39,9 +39,14 @@ function NotifRow({ notif, onMarkRead, onNavigate }) {
   const actionBtn = () => {
     if (notif.type === 'shift_rejected' || notif.type === 'shift_claimed') {
       return (
-        <Button small variant="primary" onClick={e => { e.stopPropagation(); onNavigate('schedule') }}>
-          Reassign
-        </Button>
+        <div className="flex gap-1.5">
+          <Button small variant="primary" onClick={e => { e.stopPropagation(); onNavigate('schedule') }}>
+            Reassign
+          </Button>
+          <Button small variant="ghost" onClick={e => { e.stopPropagation(); onIgnore(notif.id) }}>
+            Ignore
+          </Button>
+        </div>
       )
     }
     if (notif.type === 'shift_confirmed') {
@@ -137,7 +142,7 @@ function StatCard({ icon, label, value, color }) {
 
 // ── Main view ─────────────────────────────────────────────────────────────────
 export default function NotificationsView() {
-  const { notifications, loading, markRead, markAllRead } = useNotificationsStore()
+  const { notifications, loading, markRead, markAllRead, clearAllPending, ignoreNotif, ignoreAll } = useNotificationsStore()
   const { instructors } = useDirectoryStore()
   const navigate        = useNavigate()
   const [activeTab, setActiveTab] = useState('all')
@@ -194,9 +199,14 @@ export default function NotificationsView() {
               </span>
             )}
           </div>
-          {unreadCount > 0 && (
-            <Button small variant="ghost" onClick={markAllRead}>Mark all read</Button>
-          )}
+          <div className="flex gap-2">
+            {pendingCount > 0 && (
+              <Button small variant="ghost" onClick={ignoreAll}>Ignore all</Button>
+            )}
+            {unreadCount > 0 && (
+              <Button small variant="ghost" onClick={markAllRead}>Mark all read</Button>
+            )}
+          </div>
         </div>
 
         {/* Stats row */}
@@ -248,6 +258,7 @@ export default function NotificationsView() {
               notif={notif}
               onMarkRead={markRead}
               onNavigate={(path) => navigate(`/${path}`)}
+              onIgnore={ignoreNotif}
             />
           ))
         )}

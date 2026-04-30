@@ -1,9 +1,10 @@
 import { create } from 'zustand'
 import {
   collection, doc, onSnapshot, addDoc,
-  updateDoc, query, orderBy, serverTimestamp,
+  updateDoc, deleteDoc, query, orderBy,
+  serverTimestamp, writeBatch, getDocs,
 } from 'firebase/firestore'
-import { db }  from '../utils/firebase'
+import { db } from '../utils/firebase'
 
 const useChatStore = create((set, get) => ({
   chats:        [],
@@ -13,13 +14,34 @@ const useChatStore = create((set, get) => ({
   _unsubs:      [],
 
   init() {
-    const unsub = onSnapshot(collection(db, 'chats'), (snap) => {
+    const unsubChats = onSnapshot(collection(db, 'chats'), (snap) => {
       const chats = snap.docs
         .map(d => ({ id: d.id, ...d.data() }))
-        .sort((a, b) => (b.lastAt?.seconds || 0) - (a.lastAt?.seconds || 0))
+        .sort((a, b) => {
+          // Pinned chats first, then by lastAt
+          const aPin = a.pinnedAt?.seconds || 0
+          const bPin = b.pinnedAt?.seconds || 0
+          if (aPin !== bPin) return bPin - aPin
+          return (b.lastAt?.seconds || 0) - (a.lastAt?.seconds || 0)
+        })
       set({ chats, loading: false })
+
+      chats.forEach(chat => {
+        if (get()._unsubs.some(u => u._chatId === chat.id)) return
+        const q = query(collection(db, 'chats', chat.id, 'messages'), orderBy('createdAt', 'asc'))
+        const unsub = onSnapshot(q, (msgSnap) => {
+          set(s => ({
+            messages: {
+              ...s.messages,
+              [chat.id]: msgSnap.docs.map(d => ({ id: d.id, ...d.data() })),
+            },
+          }))
+        })
+        unsub._chatId = chat.id
+        set(s => ({ _unsubs: [...s._unsubs, unsub] }))
+      })
     })
-    set(s => ({ _unsubs: [...s._unsubs, unsub] }))
+    set(s => ({ _unsubs: [...s._unsubs, unsubChats] }))
   },
 
   cleanup() {
@@ -31,10 +53,7 @@ const useChatStore = create((set, get) => ({
     set({ activeChatId: chatId })
     if (!chatId) return
     if (get()._unsubs.some(u => u._chatId === chatId)) return
-    const q = query(
-      collection(db, 'chats', chatId, 'messages'),
-      orderBy('createdAt', 'asc'),
-    )
+    const q = query(collection(db, 'chats', chatId, 'messages'), orderBy('createdAt', 'asc'))
     const unsub = onSnapshot(q, (snap) => {
       set(s => ({
         messages: {
@@ -50,10 +69,8 @@ const useChatStore = create((set, get) => ({
   async markChatRead(chatId, userId) {
     if (!chatId || !userId) return
     try {
-      await updateDoc(doc(db, 'chats', chatId), {
-        [`lastRead.${userId}`]: serverTimestamp(),
-      })
-    } catch (e) { /* ignore */ }
+      await updateDoc(doc(db, 'chats', chatId), { [`lastRead.${userId}`]: serverTimestamp() })
+    } catch { /* ignore */ }
   },
 
   async sendMessage(chatId, payload) {
@@ -74,6 +91,33 @@ const useChatStore = create((set, get) => ({
     })
   },
 
+  // ── Pin / Unpin chat ────────────────────────────────────────────────────────
+  async pinChat(chatId, pinned) {
+    await updateDoc(doc(db, 'chats', chatId), {
+      pinnedAt: pinned ? serverTimestamp() : null,
+    })
+  },
+
+  // ── Delete a single message ────────────────────────────────────────────────
+  async deleteMessage(chatId, msgId) {
+    await deleteDoc(doc(db, 'chats', chatId, 'messages', msgId))
+  },
+
+  // ── Delete entire chat + all its messages ─────────────────────────────────
+  async deleteChat(chatId) {
+    const batch = writeBatch(db)
+    // Delete all messages first
+    const msgsSnap = await getDocs(collection(db, 'chats', chatId, 'messages'))
+    msgsSnap.docs.forEach(d => batch.delete(d.ref))
+    batch.delete(doc(db, 'chats', chatId))
+    await batch.commit()
+    // Clean up local state
+    if (get().activeChatId === chatId) set({ activeChatId: null })
+    set(s => ({
+      messages: Object.fromEntries(Object.entries(s.messages).filter(([k]) => k !== chatId)),
+    }))
+  },
+
   async addReaction(chatId, msgId, emoji, userId) {
     const msg = (get().messages[chatId] || []).find(m => m.id === msgId)
     if (!msg) return
@@ -88,14 +132,16 @@ const useChatStore = create((set, get) => ({
     await updateDoc(doc(db, 'chats', chatId, 'messages', msgId), { reactions })
   },
 
-  async createChat({ name, members, isGroup }) {
+  async createChat({ name, members, isGroup, createdBy }) {
     const ref = await addDoc(collection(db, 'chats'), {
       name:        name || '',
       members:     members || [],
       isGroup:     isGroup || false,
+      createdBy:   createdBy || null,
       createdAt:   serverTimestamp(),
       lastMessage: '',
       lastAt:      serverTimestamp(),
+      pinnedAt:    null,
     })
     return ref.id
   },

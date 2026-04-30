@@ -84,6 +84,44 @@ const useTeacherStore = create((set, get) => ({
     })
   },
 
+  // Decline an open shift — adds user to declinedBy so they stop seeing it
+  async declineOpenShift(shift, userId, userName, note) {
+    const { arrayUnion } = await import('firebase/firestore')
+    await updateDoc(doc(db, 'shifts', shift.id), {
+      declinedBy: arrayUnion(userId),
+    })
+    await createNotification({
+      type:        'shift_declined',
+      forAdmin:    true,
+      recipientId: 'admin',
+      actorName:   userName,
+      shiftId:     shift.id,
+      shiftDate:   shift.date,
+      shiftStart:  shift.start,
+      shiftTitle:  shift.title || 'Shift',
+      message:     note || '',
+    })
+  },
+
+  // Release an assigned shift — teacher can't teach, returns it to open pool
+  async releaseShift(shift, userId, userName, note) {
+    // Same as reject — keep instructorId so admin sees who released it
+    await updateDoc(doc(db, 'shifts', shift.id), {
+      confirmationStatus: 'rejected',
+    })
+    await createNotification({
+      type:        'shift_released',
+      forAdmin:    true,
+      recipientId: 'admin',
+      actorName:   userName,
+      shiftId:     shift.id,
+      shiftDate:   shift.date,
+      shiftStart:  shift.start,
+      shiftTitle:  shift.title || 'Shift',
+      message:     note || '',
+    })
+  },
+
   // Claim an open shift
   async claimShift(shift, userId, userName) {
     await updateDoc(doc(db, 'shifts', shift.id), {
