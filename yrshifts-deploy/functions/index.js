@@ -186,14 +186,15 @@ exports.onUserDeleted = onDocumentDeleted('users/{userId}', async (event) => {
 // ─────────────────────────────────────────────────────────────────────────────
 exports.onNotificationCreated = onDocumentCreated({ document: 'notifications/{notifId}', secrets: EMAIL_SECRETS }, async (event) => {
   const notif = event.data?.data()
-  if (!notif?.recipientId) return
+  if (!notif) return
 
-  // Admin-feed notifications use recipientId "admin". Fan out to all admin users.
-  if (notif.recipientId === 'admin') {
-    const admins = await db.collection('users').where('role', '==', 'admin').get()
-    for (const adminDoc of admins.docs) {
-      const adminUser = { id: adminDoc.id, ...adminDoc.data() }
-      await deliver(adminUser, buildSubject(notif), buildBody(notif))
+  // Admin-feed notifications — fan out to all owners + admins
+  if (!notif.recipientId || notif.recipientId === 'admin' || notif.forAdmin === true) {
+    const snap = await db.collection('users')
+      .where('role', 'in', ['owner', 'admin'])
+      .get()
+    for (const d of snap.docs) {
+      await deliver({ id: d.id, ...d.data() }, buildSubject(notif), buildBody(notif))
     }
     return
   }
@@ -211,7 +212,7 @@ exports.onNotificationCreated = onDocumentCreated({ document: 'notifications/{no
 //    - A shift is edited (key fields changed) and the teacher is assigned
 //    - A shift is deleted (instructorId was set)
 // ─────────────────────────────────────────────────────────────────────────────
-exports.onShiftChanged = onDocumentWritten('shifts/{shiftId}', async (event) => {
+exports.onShiftChanged = onDocumentWritten({ document: 'shifts/{shiftId}', secrets: EMAIL_SECRETS }, async (event) => {
   const before = event.data.before?.data()
   const after  = event.data.after?.data()
 
@@ -265,7 +266,7 @@ exports.onShiftChanged = onDocumentWritten('shifts/{shiftId}', async (event) => 
 // 4. OPEN SHIFT POSTED — notify ALL teachers
 //    Fires when a shift is created or updated to be claimable
 // ─────────────────────────────────────────────────────────────────────────────
-exports.onOpenShift = onDocumentWritten('shifts/{shiftId}', async (event) => {
+exports.onOpenShift = onDocumentWritten({ document: 'shifts/{shiftId}', secrets: EMAIL_SECRETS }, async (event) => {
   const before = event.data.before?.data()
   const after  = event.data.after?.data()
   if (!after) return
@@ -286,7 +287,7 @@ exports.onOpenShift = onDocumentWritten('shifts/{shiftId}', async (event) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // 5. NEW EVENT — notify ALL teachers
 // ─────────────────────────────────────────────────────────────────────────────
-exports.onEventCreated = onDocumentCreated('events/{eventId}', async (event) => {
+exports.onEventCreated = onDocumentCreated({ document: 'events/{eventId}', secrets: EMAIL_SECRETS }, async (event) => {
   const e = event.data?.data()
   if (!e) return
 
@@ -304,7 +305,7 @@ exports.onEventCreated = onDocumentCreated('events/{eventId}', async (event) => 
 // ─────────────────────────────────────────────────────────────────────────────
 // 6. NEW WEEKLY BUZZ POST — notify ALL teachers
 // ─────────────────────────────────────────────────────────────────────────────
-exports.onBuzzPostCreated = onDocumentCreated('weekly_buzz/{postId}', async (event) => {
+exports.onBuzzPostCreated = onDocumentCreated({ document: 'weekly_buzz/{postId}', secrets: EMAIL_SECRETS }, async (event) => {
   const post = event.data?.data()
   if (!post) return
 
@@ -356,7 +357,7 @@ exports.onChatMessageCreated = onDocumentCreated(
 )
 
 exports.sendDayBeforeReminders = onSchedule(
-  { schedule: '0 9 * * *', timeZone: 'America/Chicago' },
+  { schedule: '0 9 * * *', timeZone: 'America/Chicago', secrets: EMAIL_SECRETS },
   async () => {
     const d = new Date()
     d.setDate(d.getDate() + 1)
@@ -556,7 +557,7 @@ exports.createTeacherAccount = onCall({ enforceAppCheck: false, secrets: EMAIL_S
     try { await db.collection('users').doc(oldId).delete() } catch { /* ignore */ }
   }
 
-  const link = await admin.auth().generatePasswordResetLink(email, {
+  const link = await admin.auth().generateSignInWithEmailLink(email, {
     url: 'https://yrshifts.web.app/app',
     handleCodeInApp: true,
   })
@@ -575,9 +576,9 @@ exports.createTeacherAccount = onCall({ enforceAppCheck: false, secrets: EMAIL_S
         from:    `"ShiftHub" <${process.env.SMTP_USER}>`,
         to:      email,
         subject: `${displayFirst}, you're invited to ShiftHub`,
-        text:    `Hi ${displayFirst},\n\nYou've been added to ShiftHub by Young Rembrandts.\n\nClick the link below to set your password:\n\n${link}\n\nThis link expires in 1 hour.\n\nhttps://yrshifts.web.app/app`,
+        text:    `Hi ${displayFirst},\n\nYou've been added to ShiftHub by Young Rembrandts.\n\nClick the link below to set your password:\n\n${link}\n\nThis link expires in 6 hours.\n\nhttps://yrshifts.web.app/app`,
         html:    emailHtml(`Welcome to ShiftHub, ${displayFirst}!`,
-          `You've been added to ShiftHub by Young Rembrandts.\n\n<a href="${link}" style="background:#4EA8D6;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;display:inline-block;margin:8px 0">Set my password →</a>\n\nThis link expires in 1 hour.`),
+          `You've been added to ShiftHub by Young Rembrandts.\n\n<a href="${link}" style="background:#4EA8D6;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;display:inline-block;margin:8px 0">Set my password →</a>\n\nThis link expires in 6 hours.`),
       })
     } catch (e) { console.error('Invite email:', e.message) }
   }
@@ -591,6 +592,50 @@ exports.createTeacherAccount = onCall({ enforceAppCheck: false, secrets: EMAIL_S
   })
 
   return { uid, link }
+})
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 11. RESEND INVITE — callable, re-generates sign-in link for expired invites
+// ─────────────────────────────────────────────────────────────────────────────
+exports.resendInvite = onCall({ enforceAppCheck: false, secrets: EMAIL_SECRETS }, async (request) => {
+  const { email } = request.data || {}
+  if (!email) throw new HttpsError('invalid-argument', 'Email required')
+
+  // Check user exists
+  let userRecord
+  try { userRecord = await admin.auth().getUserByEmail(email) }
+  catch { throw new HttpsError('not-found', 'No account found for this email') }
+
+  const snap = await db.collection('users').doc(userRecord.uid).get()
+  if (!snap.exists) throw new HttpsError('not-found', 'No profile found')
+  const profile = snap.data()
+  const firstName = profile.firstName || 'there'
+
+  const link = await admin.auth().generateSignInWithEmailLink(email, {
+    url: 'https://yrshifts.web.app/app',
+    handleCodeInApp: true,
+  })
+
+  if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+    try {
+      const transport = require('nodemailer').createTransport({
+        host: 'smtp.gmail.com', port: 465, secure: true,
+        auth: { user: process.env.SMTP_USER.trim(), pass: process.env.SMTP_PASS.replace(/\s/g,'') },
+        tls: { rejectUnauthorized: false },
+      })
+      await transport.sendMail({
+        from:    `"ShiftHub" <${process.env.SMTP_USER}>`,
+        to:      email,
+        subject: `${firstName}, here's your new ShiftHub invite link`,
+        text:    `Hi ${firstName},\n\nYour previous invite link expired. Here's a fresh one:\n\n${link}\n\nThis link expires in 6 hours.\n\nhttps://yrshifts.web.app/app`,
+        html:    emailHtml(`New invite link, ${firstName}!`,
+          `Your previous link expired. Here's a fresh one.\n\n<a href="${link}" style="background:#4EA8D6;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;display:inline-block;margin:8px 0">Sign in to ShiftHub →</a>\n\nThis link expires in 6 hours.`),
+      })
+    } catch(e) { console.error('Resend invite email:', e.message) }
+  }
+
+  return { ok: true }
 })
 
 // ─────────────────────────────────────────────────────────────────────────────

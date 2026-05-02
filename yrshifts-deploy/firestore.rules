@@ -8,7 +8,8 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
     }
 
-    function isAdmin() { return isSignedIn() && userRole() == 'admin'; }
+    function isAdmin()   { return isSignedIn() && userRole() in ['owner', 'admin', 'manager']; }
+    function isOwner()   { return isSignedIn() && userRole() == 'owner'; }
 
     // ── Users ─────────────────────────────────────────────────────────────────
     match /users/{userId} {
@@ -63,15 +64,9 @@ service cloud.firestore {
 
     // ── Notifications ─────────────────────────────────────────────────────────
     match /notifications/{notifId} {
-      allow read: if isSignedIn()
-        && (resource.data.recipientId == request.auth.uid
-            || resource.data.forAdmin  == true
-            || isAdmin());
+      allow read:   if isSignedIn();
       allow create: if isSignedIn();
-      allow update: if isSignedIn()
-        && (resource.data.recipientId == request.auth.uid
-            || resource.data.forAdmin  == true
-            || isAdmin());
+      allow update: if isSignedIn();
       allow delete: if isAdmin();
     }
 

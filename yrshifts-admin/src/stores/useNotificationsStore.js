@@ -59,20 +59,25 @@ const useNotificationsStore = create((set, get) => ({
     await batch.commit()
   },
 
-  // Ignore a single notification — marks it read and flags it as ignored
+  // Ignore a single notification
   async ignoreNotif(id) {
-    await updateDoc(doc(db, 'notifications', id), { status: 'read', ignored: true })
+    if (!id) return
+    try {
+      await updateDoc(doc(db, 'notifications', id), { status: 'read', ignored: true })
+    } catch(e) { console.error('ignoreNotif failed:', e) }
   },
 
-  // Ignore all pending (rejected/claimed) notifications
+  // Ignore all pending — called with no args, uses internal list
   async ignoreAll() {
     const pending = get().notifications.filter(n =>
-      ['shift_rejected', 'shift_claimed', 'shift_unconfirmed'].includes(n.type)
+      ['shift_rejected', 'shift_claimed', 'shift_unconfirmed'].includes(n.type) && !n.ignored
     )
     if (!pending.length) return
-    const batch = writeBatch(db)
-    pending.forEach(n => batch.update(doc(db, 'notifications', n.id), { status: 'read', ignored: true }))
-    await batch.commit()
+    try {
+      const batch = writeBatch(db)
+      pending.forEach(n => batch.update(doc(db, 'notifications', n.id), { status: 'read', ignored: true }))
+      await batch.commit()
+    } catch(e) { console.error('ignoreAll failed:', e) }
   },
 }))
 

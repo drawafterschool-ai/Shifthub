@@ -148,20 +148,21 @@ export default function NotificationsView() {
   const [activeTab, setActiveTab] = useState('all')
 
   const unreadCount    = notifications.filter(n => n.status === 'unread').length
-  const pendingCount   = notifications.filter(n => PENDING_TYPES.includes(n.type)).length
+  const pendingCount   = notifications.filter(n => PENDING_TYPES.includes(n.type) && !n.ignored).length
   const todayCount     = notifications.filter(n => {
     const d = n.createdAt?.seconds ? n.createdAt.seconds * 1000 : n.createdAt
     return d && (Date.now() - d) < 86400000
   }).length
 
   const filtered = useMemo(() => {
+    const visible = notifications.filter(n => !n.ignored)
     switch (activeTab) {
-      case 'shifts':  return notifications.filter(n => SHIFT_TYPES.includes(n.type))
-      case 'people':  return notifications.filter(n => PEOPLE_TYPES.includes(n.type))
-      case 'chat':    return notifications.filter(n => CHAT_TYPES.includes(n.type))
-      case 'buzz':    return notifications.filter(n => BUZZ_TYPES.includes(n.type))
-      case 'pending': return notifications.filter(n => PENDING_TYPES.includes(n.type))
-      default:        return notifications
+      case 'shifts':  return visible.filter(n => SHIFT_TYPES.includes(n.type))
+      case 'people':  return visible.filter(n => PEOPLE_TYPES.includes(n.type))
+      case 'chat':    return visible.filter(n => CHAT_TYPES.includes(n.type))
+      case 'buzz':    return visible.filter(n => BUZZ_TYPES.includes(n.type))
+      case 'pending': return visible.filter(n => PENDING_TYPES.includes(n.type))
+      default:        return visible
     }
   }, [notifications, activeTab])
 
@@ -201,7 +202,7 @@ export default function NotificationsView() {
           </div>
           <div className="flex gap-2">
             {pendingCount > 0 && (
-              <Button small variant="ghost" onClick={ignoreAll}>Ignore all</Button>
+              <Button small variant="ghost" onClick={() => ignoreAll()}>Ignore all</Button>
             )}
             {unreadCount > 0 && (
               <Button small variant="ghost" onClick={markAllRead}>Mark all read</Button>

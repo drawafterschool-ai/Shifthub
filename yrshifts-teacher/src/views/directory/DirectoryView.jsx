@@ -3,6 +3,7 @@ import { useOutletContext }   from 'react-router-dom'
 import { httpsCallable } from 'firebase/functions'
 import { functions }     from '../../utils/firebase'
 import useDirectoryStore from '../../stores/useDirectoryStore'
+import useAuthStore      from '../../stores/useAuthStore'
 import { uid, formatPhone } from '../../utils/helpers'
 import Avatar  from '../../components/Avatar'
 import Button  from '../../components/Button'
@@ -19,6 +20,7 @@ function ColourPicker({ value, onChange }) {
           className="w-6 h-6 rounded-full border-2 cursor-pointer transition-transform hover:scale-110 flex-shrink-0"
           style={{ background: c, borderColor: value === c ? '#fff' : 'transparent' }} />
       ))}
+
     </div>
   )
 }
@@ -147,18 +149,16 @@ function InviteModal({ instructor, onClose }) {
         <div className="flex flex-col gap-4">
           <div className="text-center py-2">
             <p className="text-4xl mb-3">✅</p>
-            <p className="text-base font-bold text-primary mb-1">Account created!</p>
+            <p className="text-base font-bold text-primary mb-1">Invite sent!</p>
             <p className="text-sm text-muted leading-relaxed">
-              <strong>{sentName}</strong> has been added to the directory.
-              {process.env.VITE_SMTP_CONFIGURED === 'true'
-                ? ' An email with a sign-in link has been sent.'
-                : ' Share the link below so they can set their password.'}
+              An email with a sign-in link has been sent to <strong>{email}</strong>.
+              They can also use the link below if the email doesn't arrive.
             </p>
           </div>
           {inviteLink && (
             <div className="bg-raised border border-app rounded-xl p-3">
-              <p className="text-xs text-muted mb-2 font-semibold uppercase tracking-wide">Set-password link</p>
-              <p className="text-xs font-mono text-accent break-all mb-3">{inviteLink}</p>
+              <p className="text-xs text-muted mb-2 font-semibold uppercase tracking-wide">Backup link (share if needed)</p>
+              <p className="text-xs font-mono text-accent break-all mb-3 leading-relaxed">{inviteLink}</p>
               <button onClick={copyLink}
                 className="w-full py-2 rounded-lg bg-accent text-white text-sm font-semibold cursor-pointer border-none">
                 {copyMsg || '📋 Copy link'}
@@ -166,7 +166,7 @@ function InviteModal({ instructor, onClose }) {
             </div>
           )}
           <p className="text-xs text-dim text-center">
-            After setting their password they sign in at{' '}
+            Link expires in 1 hour. They sign in at{' '}
             <span className="font-mono text-accent">yrshifts.web.app/app</span>
           </p>
           <Button className="w-full justify-center" onClick={onClose}>Done</Button>
@@ -291,6 +291,9 @@ const COLS = [
 export default function DirectoryView() {
   const sms = useOutletContext()
   const { instructors, loading, updateInstructor, deleteInstructor } = useDirectoryStore()
+  const { userProfile: myProfile } = useAuthStore()
+  const canManageRoles = myProfile?.role === 'owner'
+  const [promoting, setPromoting] = useState(null)
 
   const [search,    setSearch]    = useState('')
   const [sel,       setSel]       = useState(new Set())
@@ -432,7 +435,7 @@ export default function DirectoryView() {
           <tbody>
             {filtered.map((inst, idx) => {
               const isSel   = sel.has(inst.id)
-              const isAdmin = inst.role === 'admin'
+              const isAdmin = ['owner','admin'].includes(inst.role)
               const rowBg   = isSel ? 'bg-accent-soft' : idx % 2 === 0 ? 'bg-surface' : 'bg-app'
               return (
                 <tr key={inst.id} className={`${rowBg} border-b border-app/20 hover:bg-raised/50 transition-colors`}>
@@ -477,6 +480,13 @@ export default function DirectoryView() {
                         <button onClick={() => setInviting(inst)} title="Send invite"
                           className="text-dim hover:text-accent transition-colors cursor-pointer bg-transparent border-none text-base">📧</button>
                       )}
+                      {canManageRoles && (
+                        <button onClick={() => setPromoting(inst)}
+                          title="Change role"
+                          className="text-dim hover:text-accent transition-colors cursor-pointer bg-transparent border-none text-base">
+                          🔑
+                        </button>
+                      )}
                       <button onClick={() => setConfirmDel(inst.id)}
                         className="text-dim hover:text-danger transition-colors cursor-pointer bg-transparent border-none text-base">🗑</button>
                     </div>
@@ -518,6 +528,53 @@ export default function DirectoryView() {
           </ModalFooter>
         </Modal>
       )}
+
+      {/* Role management modal — owners only */}
+      {promoting && canManageRoles && (
+        <Modal onClose={() => setPromoting(null)} width="max-w-sm" zIndex="z-[3500]">
+          <ModalHeader title="Change role" onClose={() => setPromoting(null)} />
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-3 p-3 bg-raised rounded-xl border border-app">
+              <Avatar firstName={promoting.firstName} lastName={promoting.lastName}
+                color={promoting.color} photo={promoting.photo} size={40} />
+              <div>
+                <p className="text-sm font-bold text-primary">{promoting.firstName} {promoting.lastName}</p>
+                <p className="text-xs text-muted">{promoting.email}</p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              {[
+                { role: 'owner',   icon: '👑', label: 'Owner',   desc: 'Full access + can manage roles' },
+                { role: 'admin',   icon: '🛡️', label: 'Admin',   desc: 'Full access, cannot manage roles' },
+                { role: 'manager', icon: '📋', label: 'Manager', desc: 'Schedule + Directory + Chat only' },
+                { role: 'teacher', icon: '👤', label: 'Teacher', desc: 'Teacher app only' },
+              ].map(opt => (
+                <button key={opt.role}
+                  onClick={async () => {
+                    await updateInstructor(promoting.id, { role: opt.role })
+                    setPromoting(null)
+                  }}
+                  className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer text-left w-full transition-colors
+                    ${promoting.role === opt.role
+                      ? 'bg-accent-soft border-accent/40'
+                      : 'bg-card border-app hover:bg-raised'}`}>
+                  <span className="text-xl">{opt.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-primary">{opt.label}
+                      {promoting.role === opt.role && <span className="ml-2 text-xs text-accent font-normal">(current)</span>}
+                    </p>
+                    <p className="text-xs text-muted">{opt.desc}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+          <ModalFooter>
+            <Button onClick={() => setPromoting(null)}>Cancel</Button>
+          </ModalFooter>
+        </Modal>
+      )}
+
     </div>
   )
 }
