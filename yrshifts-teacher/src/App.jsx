@@ -5,7 +5,8 @@ import useChatStore    from './stores/useChatStore'
 
 import LoginView    from './views/LoginView'
 import ErrorBoundary from './components/ErrorBoundary'
-import ViewLoader   from './components/ViewLoader'
+import ViewLoader    from './components/ViewLoader'
+import InstallBanner from './components/InstallBanner'
 
 const ScheduleView = lazy(() => import('./views/schedule/ScheduleView'))
 const OpenView     = lazy(() => import('./views/open/OpenView'))
@@ -230,6 +231,9 @@ export default function App() {
           </button>
         </div>
       </div>
+
+      {/* Install banner */}
+      <InstallBanner manifestUrl="/app/manifest.json" appName="ShiftHub" icon="/app/yr_logo.jpg" />
 
       {/* Push banner */}
       {showPush && !pushDismissed && (

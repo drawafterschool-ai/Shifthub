@@ -1,4 +1,8 @@
 import { useEffect, useState, useRef } from 'react'
+
+const isIOSSafari = /iphone|ipad|ipod/i.test(navigator.userAgent) &&
+  /safari/i.test(navigator.userAgent) &&
+  !/chrome|crios|fxios/i.test(navigator.userAgent)
 import DOMPurify       from 'dompurify'
 import useTeacherStore from '../../stores/useTeacherStore'
 import useAuthStore    from '../../stores/useAuthStore'
@@ -49,7 +53,7 @@ function PostModal({ post, userId, userName, onClose, onMarkSeen, onLike, onComm
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-app">
+    <div className="fixed inset-0 z-50 flex flex-col bg-app" style={isIOSSafari ? { paddingTop: "env(safe-area-inset-top, 44px)" } : {}}>
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3.5 bg-surface border-b border-app flex-shrink-0">
         <button onClick={onClose}

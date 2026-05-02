@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@khmyznikov/pwa-install": "^0.6.3",
     "dompurify": "^3.2.6",
     "firebase": "^11.0.0",
     "react": "^19.0.0",
