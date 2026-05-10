@@ -44,12 +44,7 @@ const useAuthStore = create((set, get) => ({
               clearTimeout(timer)
               clearTimeout(retryTimer)
               const profile = snap.data()
-              if (profile.role === 'admin') { window.location.replace('/admin'); return }
-              if (profile.role !== 'teacher') {
-                fbSignOut(auth)
-                set({ userProfile: null, profileMissing: true, loading: false })
-                return
-              }
+              if (['owner','admin','manager'].includes(profile.role)) { window.location.replace('/admin'); return }
               set({ userProfile: profile, profileMissing: false, loading: false })
             } else {
               // Doc doesn't exist yet — retry once after 1s (first-login race)

@@ -6,7 +6,7 @@ import useChatStore    from './stores/useChatStore'
 import LoginView    from './views/LoginView'
 import ErrorBoundary from './components/ErrorBoundary'
 import ViewLoader    from './components/ViewLoader'
-import InstallBanner from './components/InstallBanner'
+import PWAPrompt     from 'react-ios-pwa-prompt'
 
 const ScheduleView = lazy(() => import('./views/schedule/ScheduleView'))
 const OpenView     = lazy(() => import('./views/open/OpenView'))
@@ -174,7 +174,7 @@ export default function App() {
   useEffect(() => {
     if (!user || !userProfile) return
     useTeacherStore.getState().init(user.uid)
-    useChatStore.getState().init()
+    useChatStore.getState().init(user.uid)
     if ((pushSupported || needsHomeScreen) && notifPermission() !== 'granted' && !pushDismissed) {
       setTimeout(() => setShowPush(true), 1500)
     }
@@ -232,8 +232,19 @@ export default function App() {
         </div>
       </div>
 
-      {/* Install banner */}
-      <InstallBanner manifestUrl="/app/manifest.json" appName="ShiftHub" icon="/app/yr_logo.jpg" />
+      {/* iOS PWA install prompt */}
+      <PWAPrompt
+        promptOnVisit={1}
+        timesToShow={3}
+        delay={1000}
+        copyTitle="Install ShiftHub"
+        copyBody="Install this app on your iPhone. Tap the share button below then 'Add to Home Screen' to receive shift notifications."
+        copyShareButtonLabel="1) Press the 'Share' button"
+        copyAddHomeButtonLabel="2) Press 'Add to Home Screen'"
+        copyClosePrompt="Not now"
+        permanentlyHideOnDismiss={false}
+        appIconPath="/yr_logo.jpg"
+      />
 
       {/* Push banner */}
       {showPush && !pushDismissed && (
@@ -263,26 +274,26 @@ export default function App() {
 
       {/* Tab bar */}
       <div className="flex-shrink-0 bg-surface border-t border-app"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)', zIndex: 1 }}>
+        style={{ zIndex: 1, paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 8px)' }}>
         <div className="flex">
           {TABS.map(t => {
             const badge    = badges[t.id] || 0
             const isActive = tab === t.id
             return (
               <button key={t.id} onClick={() => setTab(t.id)}
-                className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 cursor-pointer border-none transition-colors min-w-0
+                className={`flex-1 flex flex-col items-center justify-center py-3 gap-1 cursor-pointer border-none transition-colors min-w-0
                   ${isActive ? 'bg-accent-soft' : 'bg-transparent'}`}>
                 <div className="relative">
-                  <span style={{ fontSize: 20, lineHeight: 1 }}>{t.icon}</span>
+                  <span style={{ fontSize: 26, lineHeight: 1 }}>{t.icon}</span>
                   {badge > 0 && (
-                    <span className="absolute -top-1 -right-2.5 min-w-[15px] h-[15px] rounded-full bg-red-500 text-white font-bold flex items-center justify-center"
-                      style={{ fontSize: 9, padding: '0 2px' }}>
+                    <span className="absolute -top-1 -right-3 min-w-[16px] h-[16px] rounded-full bg-red-500 text-white font-bold flex items-center justify-center"
+                      style={{ fontSize: 9, padding: '0 3px' }}>
                       {badge > 9 ? '9+' : badge}
                     </span>
                   )}
                 </div>
                 <span className={`font-semibold truncate w-full text-center px-0.5 ${isActive ? 'text-accent' : 'text-gray-400'}`}
-                  style={{ fontSize: 9 }}>
+                  style={{ fontSize: 10 }}>
                   {t.label}
                 </span>
               </button>

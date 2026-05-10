@@ -8,7 +8,9 @@ import useNotificationsStore from './stores/useNotificationsStore'
 import useSettingsStore      from './stores/useSettingsStore'
 import useChatStore          from './stores/useChatStore'
 
-import AdminLayout  from './layout/AdminLayout'
+import AdminLayout    from './layout/AdminLayout'
+import useThemeStore  from './stores/useThemeStore'
+import PWAPrompt     from 'react-ios-pwa-prompt'
 import ErrorBoundary from './components/ErrorBoundary'
 import ViewLoader   from './components/ViewLoader'
 
@@ -94,11 +96,23 @@ function StoreInit() {
 
 // ── App ───────────────────────────────────────────────────────────────────────
 export default function App() {
-  useEffect(() => { useAuthStore.getState().init() }, [])
+  useEffect(() => { useAuthStore.getState().init(); useThemeStore.getState().init() }, [])
 
   return (
     <BrowserRouter basename="/admin">
       <StoreInit />
+      <PWAPrompt
+        promptOnVisit={1}
+        timesToShow={3}
+        delay={1000}
+        copyTitle="Install ShiftHub Admin"
+        copyBody="Install this app on your iPhone. Tap the share button below then 'Add to Home Screen' to use it in full screen."
+        copyShareButtonLabel="1) Press the 'Share' button"
+        copyAddHomeButtonLabel="2) Press 'Add to Home Screen'"
+        copyClosePrompt="Not now"
+        permanentlyHideOnDismiss={false}
+        appIconPath="/yr_logo.jpg"
+      />
       <Routes>
         <Route path="/login" element={<LoginView />} />
 

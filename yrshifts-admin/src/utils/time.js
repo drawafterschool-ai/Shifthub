@@ -1,8 +1,9 @@
 export const TIME_OPTS = []
-for (let h = 0; h < 24; h++) {
-  for (let m = 0; m < 60; m += 30) {
-    const h12   = h === 0 ? 12 : h > 12 ? h - 12 : h
-    const mins  = m === 0 ? '00' : '30'
+for (let h = 6; h <= 21; h++) {
+  for (let m = 0; m < 60; m += 15) {
+    if (h === 21 && m > 0) break
+    const h12    = h === 0 ? 12 : h > 12 ? h - 12 : h
+    const mins   = String(m).padStart(2, '0')
     const period = h < 12 ? 'AM' : 'PM'
     TIME_OPTS.push(`${h12}:${mins} ${period}`)
   }

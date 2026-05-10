@@ -13,7 +13,8 @@ const RSVP_OPTIONS = [
 
 function fmtDate(dateStr, timeStr) {
   if (!dateStr) return ''
-  const d    = new Date(dateStr + 'T12:00:00')
+  const [y,mo,dy] = dateStr.split('-').map(Number)
+  const d = new Date(y, mo - 1, dy)
   const date = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
   if (timeStr) {
     // Convert HH:MM to 12h format
@@ -27,8 +28,9 @@ function fmtDate(dateStr, timeStr) {
 
 function daysUntil(dateStr) {
   const today = new Date(); today.setHours(0,0,0,0)
-  const d     = new Date(dateStr + 'T12:00:00')
-  const diff  = Math.round((d - today) / 86400000)
+  const [y,m,d] = dateStr.split('-').map(Number)
+  const date = new Date(y, m - 1, d)
+  const diff = Math.round((date - today) / 86400000)
   if (diff < 0)  return null
   if (diff === 0) return 'Today'
   if (diff === 1) return 'Tomorrow'

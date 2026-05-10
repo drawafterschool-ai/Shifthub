@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { doc, updateDoc }   from 'firebase/firestore'
 import { ref as stRef, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth'
@@ -18,6 +18,25 @@ export default function AdminProfileView() {
   const [saving,    setSaving]    = useState(false)
   const [toast,     setToast]     = useState(null)
   const fileRef = useRef(null)
+  const [deferredPrompt, setDeferredPrompt] = useState(null)
+  const [pwaInstalled,   setPwaInstalled]   = useState(
+    window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true
+  )
+
+  useEffect(() => {
+    const handler = (e) => { e.preventDefault(); setDeferredPrompt(e) }
+    window.addEventListener('beforeinstallprompt', handler)
+    window.addEventListener('appinstalled', () => { setPwaInstalled(true); setDeferredPrompt(null) })
+    return () => window.removeEventListener('beforeinstallprompt', handler)
+  }, [])
+
+  const handleInstall = async () => {
+    if (!deferredPrompt) return
+    deferredPrompt.prompt()
+    const { outcome } = await deferredPrompt.userChoice
+    if (outcome === 'accepted') setPwaInstalled(true)
+    setDeferredPrompt(null)
+  }
 
   const showToast = (msg, ok = true) => { setToast({ msg, ok }); setTimeout(() => setToast(null), 2800) }
 
@@ -117,6 +136,33 @@ export default function AdminProfileView() {
             Update password
           </button>
         </div>
+
+        {/* Install PWA */}
+        {!pwaInstalled && (
+          <div className="bg-card border border-app rounded-2xl p-4 flex flex-col gap-3">
+            <p className="text-xs font-bold text-muted uppercase tracking-wide">Install App</p>
+            {deferredPrompt ? (
+              <>
+                <p className="text-xs text-muted leading-relaxed">Install ShiftHub on your device for faster access and a full-screen experience.</p>
+                <button onClick={handleInstall}
+                  className="w-full py-3 rounded-xl bg-accent text-white text-sm font-bold cursor-pointer border-none">
+                  📲 Install ShiftHub Admin
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-xs text-muted leading-relaxed">To install on iPhone: tap the <strong className="text-primary">Share ⎙</strong> button in Safari, then tap <strong className="text-primary">"Add to Home Screen"</strong>.</p>
+                <p className="text-xs text-dim">On Android: use Chrome and tap the menu → "Add to Home Screen".</p>
+              </>
+            )}
+          </div>
+        )}
+        {pwaInstalled && (
+          <div className="bg-ok-soft border border-ok/20 rounded-2xl p-4 flex items-center gap-3">
+            <span>✅</span>
+            <p className="text-xs text-ok font-semibold">App installed on this device</p>
+          </div>
+        )}
 
         <button onClick={signOut}
           className="w-full py-3 rounded-xl border border-danger/40 text-danger text-sm font-semibold cursor-pointer bg-transparent">

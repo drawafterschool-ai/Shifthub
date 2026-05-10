@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import {
   collection, doc, onSnapshot, addDoc,
-  updateDoc, deleteDoc, query, orderBy,
+  updateDoc, deleteDoc, query, orderBy, where,
   serverTimestamp, writeBatch, getDocs,
 } from 'firebase/firestore'
 import { db } from '../utils/firebase'
@@ -13,8 +13,11 @@ const useChatStore = create((set, get) => ({
   loading:      true,
   _unsubs:      [],
 
-  init() {
-    const unsubChats = onSnapshot(collection(db, 'chats'), (snap) => {
+  init(userId) {
+    if (!userId) return
+    // Only fetch chats where current user is a member
+    const chatsQuery = query(collection(db, 'chats'), where('members', 'array-contains', userId))
+    const unsubChats = onSnapshot(chatsQuery, (snap) => {
       const chats = snap.docs
         .map(d => ({ id: d.id, ...d.data() }))
         .sort((a, b) => {

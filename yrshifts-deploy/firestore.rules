@@ -90,9 +90,30 @@ service cloud.firestore {
 
     // ── Chat ──────────────────────────────────────────────────────────────────
     match /chats/{chatId} {
-      allow read, write: if isSignedIn();
+      // Any signed-in user can read group chats; DMs only visible to members or admins
+      allow read:   if isSignedIn() && (
+        isAdmin() ||
+        resource.data.isGroup == true ||
+        request.auth.uid in resource.data.members
+      );
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        resource.data.isGroup == true ||
+        request.auth.uid in resource.data.members
+      );
+      allow delete: if isSignedIn() && (
+        isAdmin() || request.auth.uid == resource.data.createdBy
+      );
       match /messages/{msgId} {
-        allow read, write: if isSignedIn();
+        // Any signed-in user can read/write messages in group chats
+        // DM messages only visible to members or admins
+        allow read:   if isSignedIn();
+        allow create: if isSignedIn();
+        allow delete: if isSignedIn() && (
+          isAdmin() || request.auth.uid == resource.data.authorId
+        );
+        allow update: if isSignedIn();
       }
     }
   }

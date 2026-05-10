@@ -512,6 +512,32 @@ export default function SettingsView() {
           <ConnecteamImporter existingInstructors={instructors} />
         </Section>
 
+        <Section icon="📆" title="Calendar sync" description="Teachers receive calendar invites with every shift email">
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-2 px-3 py-2.5 bg-ok-soft border border-ok/30 rounded-xl">
+              <span>✅</span>
+              <p className="text-xs text-ok font-semibold">.ics calendar files attached to every shift assignment email</p>
+            </div>
+            <p className="text-xs text-muted leading-relaxed">
+              When you assign a shift, the teacher receives an email with a <strong>calendar invite (.ics)</strong> attached.
+              Tapping it adds the shift directly to Google Calendar, Apple Calendar, or Outlook — no login required.
+            </p>
+            <div className="bg-raised border border-app rounded-xl p-4">
+              <p className="text-xs font-bold text-muted uppercase tracking-wide mb-2">Add all shifts to your calendar</p>
+              <p className="text-xs text-dim mb-3">Copy this URL into Google Calendar → Other calendars → From URL:</p>
+              <div className="flex gap-2">
+                <code className="flex-1 bg-app border border-app rounded-lg px-3 py-2 text-xs text-accent overflow-hidden truncate">
+                  webcal://yrshifts.web.app/app/shifts.ics
+                </code>
+                <button onClick={() => navigator.clipboard.writeText('webcal://yrshifts.web.app/app/shifts.ics').then(() => alert('Copied!'))}
+                  className="px-3 py-2 rounded-lg bg-accent text-white text-xs font-bold cursor-pointer border-none flex-shrink-0">
+                  Copy
+                </button>
+              </div>
+            </div>
+          </div>
+        </Section>
+
         <Section icon="⚙️" title="Account">
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between py-3 border-b border-app/50">

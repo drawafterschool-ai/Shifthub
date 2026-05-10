@@ -67,3 +67,20 @@ html, body {
   .bg-warn-soft   { background: var(--amber-soft); }
   .bg-danger-soft { background: var(--red-soft); }
 }
+
+/* iOS Safari fix — 100vh eliminates the ~59px chin gap caused by black-translucent */
+@supports (-webkit-touch-callout: none) {
+  html, body, #root {
+    height: 100vh !important;
+    min-height: 100vh !important;
+    position: fixed !important;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+  }
+
+  .safari-bottom-lock {
+    padding-bottom: max(env(safe-area-inset-bottom), 20px) !important;
+  }
+}

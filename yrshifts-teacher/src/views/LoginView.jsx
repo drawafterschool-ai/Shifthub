@@ -3,6 +3,8 @@ import {
   signInWithEmailAndPassword,
   confirmPasswordReset,
   verifyPasswordResetCode,
+  isSignInWithEmailLink,
+  signInWithEmailLink,
 } from 'firebase/auth'
 import { auth } from '../utils/firebase'
 
@@ -29,7 +31,30 @@ export default function LoginView() {
     const urlMode = params.get('mode')
     const code    = params.get('oobCode')
 
-    if (urlMode === 'resetPassword' && code) {
+    // Handle email sign-in link (new invite flow)
+    if (isSignInWithEmailLink(auth, window.location.href)) {
+      setMode('signinlink')
+      // Try to get email from localStorage (set when invite was sent)
+      const savedEmail = window.localStorage.getItem('emailForSignIn')
+      if (savedEmail) {
+        setEmail(savedEmail)
+        signInWithEmailLink(auth, savedEmail, window.location.href)
+          .then(() => {
+            window.localStorage.removeItem('emailForSignIn')
+            window.history.replaceState({}, '', window.location.pathname)
+            setMode('success')
+          })
+          .catch(err => {
+            if (!mounted.current) return
+            if (err.code === 'auth/expired-action-code' || err.code === 'auth/invalid-action-code') {
+              setMode('expired')
+            } else {
+              setMode('signinlink') // ask for email manually
+            }
+          })
+      }
+      // If no saved email, stay in signinlink mode and ask user to enter it
+    } else if (urlMode === 'resetPassword' && code) {
       setOobCode(code)
       verifyPasswordResetCode(auth, code)
         .then(email => {
@@ -46,6 +71,31 @@ export default function LoginView() {
       setMode('login')
     }
   }, [])
+
+  // Handle email sign-in link when user needs to enter their email manually
+  const handleSignInLink = async (e) => {
+    e.preventDefault()
+    if (!mounted.current) return
+    setError('')
+    if (!email.trim()) { setError('Please enter your email address.'); return }
+    setLoading(true)
+    try {
+      await signInWithEmailLink(auth, email.trim().toLowerCase(), window.location.href)
+      window.localStorage.removeItem('emailForSignIn')
+      window.history.replaceState({}, '', window.location.pathname)
+      setMode('success')
+    } catch (err) {
+      if (!mounted.current) return
+      setLoading(false)
+      if (err.code === 'auth/expired-action-code' || err.code === 'auth/invalid-action-code') {
+        setMode('expired')
+      } else if (err.code === 'auth/invalid-email') {
+        setError('Please check your email address.')
+      } else {
+        setError('Sign-in failed. Please request a new invite.')
+      }
+    }
+  }
 
   // Set new password then rely on auth state to transition into the app
   const handleResetSubmit = async (e) => {
@@ -138,13 +188,37 @@ export default function LoginView() {
 
         <div className="bg-surface border border-app rounded-2xl p-6">
 
+          {/* Email sign-in link — ask for email if not auto-detected */}
+          {mode === 'signinlink' && (
+            <form onSubmit={handleSignInLink} className="flex flex-col gap-4">
+              <div className="bg-accent-soft border border-accent/20 rounded-xl px-3 py-2.5">
+                <p className="text-xs text-accent font-semibold">Welcome to ShiftHub!</p>
+                <p className="text-xs text-muted mt-0.5">Enter your email address to complete sign-in.</p>
+              </div>
+              {error && (
+                <div className="bg-danger-soft border border-danger/30 text-danger rounded-xl px-3 py-2.5 text-sm">
+                  ⚠️ {error}
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1.5">Your email</label>
+                <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+                  required placeholder="you@example.com" className={INPUT} autoFocus />
+              </div>
+              <button type="submit" disabled={loading}
+                className="w-full bg-accent hover:opacity-90 disabled:opacity-50 text-white font-bold py-3 rounded-xl text-sm cursor-pointer border-none">
+                {loading ? 'Signing in…' : '✓ Complete sign-in'}
+              </button>
+            </form>
+          )}
+
           {/* Expired */}
           {mode === 'expired' && (
             <div className="text-center py-4">
               <p className="text-3xl mb-3">⏱</p>
               <p className="text-sm font-semibold text-primary mb-2">This link has expired</p>
               <p className="text-sm text-muted leading-relaxed mb-5">
-                Invite links expire after 1 hour. Ask your administrator to send a new one.
+                Invite links expire after 6 hours. Ask your administrator to send a new one.
               </p>
               <button onClick={() => { setMode('login'); setError('') }}
                 className="text-sm text-accent font-semibold cursor-pointer bg-transparent border-none">

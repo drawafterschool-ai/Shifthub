@@ -1,11 +1,11 @@
 import { useEffect, useState, useRef } from 'react'
+import DOMPurify       from 'dompurify'
+import useTeacherStore from '../../stores/useTeacherStore'
+import useAuthStore    from '../../stores/useAuthStore'
 
 const isIOSSafari = /iphone|ipad|ipod/i.test(navigator.userAgent) &&
   /safari/i.test(navigator.userAgent) &&
   !/chrome|crios|fxios/i.test(navigator.userAgent)
-import DOMPurify       from 'dompurify'
-import useTeacherStore from '../../stores/useTeacherStore'
-import useAuthStore    from '../../stores/useAuthStore'
 
 const BACKGROUND_CLASS = {
   none: 'bg-raised border-app',
@@ -62,8 +62,11 @@ function PostModal({ post, userId, userName, onClose, onMarkSeen, onLike, onComm
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="px-5 py-5">
+      <div className="flex-1 overflow-y-auto relative">
+        {post.bgImage && (
+          <div style={{ position: 'fixed', inset: 0, backgroundImage: `url(/${post.bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center', opacity: 0.12, pointerEvents: 'none', zIndex: 0 }} />
+        )}
+        <div className="px-5 py-5 relative" style={{ zIndex: 1 }}>
           <h1 className="text-xl font-bold text-primary mb-1">{post.title}</h1>
           <p className="text-xs text-dim mb-5">
             {post.authorName && <span className="font-semibold">{post.authorName} · </span>}
@@ -182,10 +185,14 @@ export default function UpdatesView() {
           const bgClass = BACKGROUND_CLASS[post.backgroundId || 'none'] || BACKGROUND_CLASS.none
 
           return (
-            <div key={post.id} className="bg-card border border-app rounded-2xl overflow-hidden">
+            <div key={post.id} className="bg-card border border-app rounded-2xl overflow-hidden relative">
+              {/* Background image */}
+              {post.bgImage && (
+                <div style={{ position: 'absolute', inset: 0, backgroundImage: `url(/${post.bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center', opacity: 0.18, pointerEvents: 'none' }} />
+              )}
               {/* Card body — tap to open */}
               <button onClick={() => setOpenPost(post)}
-                className="w-full text-left p-4 cursor-pointer bg-transparent border-none">
+                className="w-full text-left p-4 cursor-pointer bg-transparent border-none relative">
                 <div className="flex items-start gap-3">
                   <div className="flex-shrink-0 mt-1">
                     {seen

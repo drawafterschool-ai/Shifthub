@@ -300,14 +300,25 @@ function PostCard({ post, instructors, onEdit, onDelete, onRemind }) {
 
 // ── Compose modal ─────────────────────────────────────────────────────────────
 function ComposeModal({ existing, onClose, onSave }) {
-  const [title,   setTitle]   = useState(existing?.title   || '')
-  const [content, setContent] = useState(existing?.content || '')
-  const [busy,    setBusy]    = useState(false)
+  const [title,      setTitle]      = useState(existing?.title      || '')
+  const [content,    setContent]    = useState(existing?.content    || '')
+  const [bgImage,    setBgImage]    = useState(existing?.bgImage    || '')
+  const [busy,       setBusy]       = useState(false)
+
+const BUZZ_BGS = [
+  { id: '',      label: 'None',       thumb: null },
+  { id: 'buzz_bg1.png', label: 'Chat',       thumb: '/buzz_bg1.png' },
+  { id: 'buzz_bg2.png', label: 'Megaphone',  thumb: '/buzz_bg2.png' },
+  { id: 'buzz_bg3.png', label: 'Forest',     thumb: '/buzz_bg3.png' },
+  { id: 'buzz_bg4.png', label: 'Stars',      thumb: '/buzz_bg4.png' },
+  { id: 'buzz_bg5.png', label: 'Snow',       thumb: '/buzz_bg5.png' },
+  { id: 'buzz_bg6.png', label: 'Clouds',     thumb: '/buzz_bg6.png' },
+]
 
   const handleSave = async (draft = false) => {
     if (!title.trim()) return
     setBusy(true)
-    await onSave({ title: title.trim(), content, draft })
+    await onSave({ title: title.trim(), content, draft, bgImage })
     setBusy(false)
     onClose()
   }
@@ -326,6 +337,20 @@ function ComposeModal({ existing, onClose, onSave }) {
         <div>
           <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1.5">Content</label>
           <RichEditor value={content} onChange={setContent} />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-2">Background image</label>
+          <div className="flex gap-2 flex-wrap">
+            {BUZZ_BGS.map(bg => (
+              <button key={bg.id} onClick={() => setBgImage(bg.id)}
+                title={bg.label}
+                className={`w-16 h-10 rounded-lg border-2 overflow-hidden cursor-pointer transition-all flex-shrink-0
+                  ${bgImage === bg.id ? 'border-accent' : 'border-app opacity-60 hover:opacity-100'}`}
+                style={bg.thumb ? { backgroundImage: `url(${bg.thumb})`, backgroundSize: 'cover', backgroundPosition: 'center' } : { background: 'var(--raised)' }}>
+                {!bg.thumb && <span className="text-xs text-dim w-full h-full flex items-center justify-center">None</span>}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
       <ModalFooter>
@@ -363,11 +388,11 @@ export default function WeeklyBuzzView() {
   const handleSave = async ({ title, content, draft }) => {
     if (compose?.id) {
       await updateDoc(doc(db, 'weekly_buzz', compose.id), {
-        title, content, draft: draft || false, updatedAt: serverTimestamp(),
+        title, content, bgImage: bgImage || '', draft: draft || false, updatedAt: serverTimestamp(),
       })
     } else {
       await addDoc(collection(db, 'weekly_buzz'), {
-        title, content, seenBy: [], likes: [], comments: [],
+        title, content, bgImage: bgImage || '', seenBy: [], likes: [], comments: [],
         draft: draft || false,
         createdAt: serverTimestamp(),
         authorName: userProfile?.firstName || 'Admin',

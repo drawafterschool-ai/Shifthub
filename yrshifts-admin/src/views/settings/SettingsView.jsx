@@ -4,6 +4,7 @@ import { db }              from '../../utils/firebase'
 import useSettingsStore    from '../../stores/useSettingsStore'
 import useScheduleStore    from '../../stores/useScheduleStore'
 import useAuthStore        from '../../stores/useAuthStore'
+import useThemeStore       from '../../stores/useThemeStore'
 import useDirectoryStore   from '../../stores/useDirectoryStore'
 import { uid }             from '../../utils/helpers'
 import Button              from '../../components/Button'
@@ -380,6 +381,7 @@ function ConnecteamImporter({ existingInstructors }) {
 export default function SettingsView() {
   const { companyName, payrollTiers, save, loading } = useSettingsStore()
   const { signOut }      = useAuthStore()
+  const { theme, themes, setTheme } = useThemeStore()
   const { instructors }  = useDirectoryStore()
 
   const [name,   setName]   = useState('')
@@ -454,6 +456,27 @@ export default function SettingsView() {
             ✅ Saved successfully
           </div>
         )}
+
+        <Section icon="🎨" title="App theme" description="Choose a visual style for the admin app">
+          <div className="grid grid-cols-3 gap-2.5">
+            {themes.map(t => (
+              <button key={t.id} onClick={() => setTheme(t.id)}
+                className={`flex flex-col items-start gap-2 p-3 rounded-xl border cursor-pointer text-left transition-all
+                  ${theme === t.id
+                    ? 'border-accent bg-accent-soft'
+                    : 'border-app bg-raised hover:border-muted'}`}>
+                <div className="flex items-center justify-between w-full">
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: t.dot }} />
+                    <span className="text-xs font-bold text-primary">{t.label}</span>
+                  </div>
+                  {theme === t.id && <span className="text-accent text-xs font-bold">✓</span>}
+                </div>
+                <span className="text-xs text-dim leading-snug">{t.description}</span>
+              </button>
+            ))}
+          </div>
+        </Section>
 
         <Section icon="🏢" title="Company profile" description="Name shown across the app">
           <div className="flex gap-3 items-end">

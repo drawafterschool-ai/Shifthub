@@ -1,0 +1,440 @@
+import { useState, useRef, useEffect } from 'react'
+import { ref as stRef, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { storage } from '../../utils/firebase'
+import { resizeFile } from '../../utils/resizeFile'
+import useChatStore   from '../../stores/useChatStore'
+import useAuthStore   from '../../stores/useAuthStore'
+
+const uid = () => Math.random().toString(36).slice(2)
+
+const EMOJIS = ['👍','❤️','😂','😮','😢','🔥','🎉','👏','💯','🙏']
+
+function fmtTime(ts) {
+  if (!ts) return ''
+  const d = ts.seconds ? new Date(ts.seconds * 1000) : new Date(ts)
+  const now = new Date()
+  const diff = now - d
+  if (diff < 60000) return 'Just now'
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
+  if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+}
+
+function ImageAlbum({ images }) {
+  const n = images.length
+  if (n === 0) return null
+  if (n === 1) return (
+    <a href={images[0].url} target="_blank" rel="noreferrer" className="block mb-1">
+      <img src={images[0].url} alt="" className="rounded-xl max-h-48 max-w-[240px] object-cover block" />
+    </a>
+  )
+  const grid = n === 2 ? 'grid-cols-2' : n === 3 ? 'grid-cols-3' : 'grid-cols-2'
+  return (
+    <div className={`grid ${grid} gap-0.5 rounded-xl overflow-hidden mb-1`} style={{ maxWidth: 240 }}>
+      {images.map(img => (
+        <a key={img.id} href={img.url} target="_blank" rel="noreferrer" className="block" style={{ aspectRatio: '1' }}>
+          <img src={img.url} alt="" className="w-full h-full object-cover" />
+        </a>
+      ))}
+    </div>
+  )
+}
+
+function Bubble({ msg, isMine, onReact, onReply, onDelete }) {
+  const [showActions, setShowActions] = useState(false)
+  const [showEmoji,   setShowEmoji]   = useState(false)
+
+  const images = (msg.attachments || []).filter(a => a.type?.startsWith('image/'))
+  const files  = (msg.attachments || []).filter(a => !a.type?.startsWith('image/'))
+  const hasReactions = msg.reactions && Object.keys(msg.reactions).length > 0
+
+  return (
+    <div className={`flex gap-2 mb-3 ${isMine ? 'flex-row-reverse' : 'flex-row'}`}>
+      <div className={`flex flex-col ${isMine ? 'items-end' : 'items-start'} max-w-[80%]`}>
+
+        {msg.replyTo && (
+          <div className={`text-xs px-2 py-1 rounded-lg mb-1 border-l-2 border-accent opacity-70
+            ${isMine ? 'bg-accent/10 text-right' : 'bg-raised'}`}>
+            <p className="font-semibold text-accent">{msg.replyTo.authorName}</p>
+            <p className="text-dim truncate">{msg.replyTo.text || '📎 Attachment'}</p>
+          </div>
+        )}
+
+        <div className="relative">
+          <div onClick={() => setShowActions(v => !v)}
+            className={`px-3 py-2 rounded-2xl cursor-pointer select-none max-w-full
+              ${isMine ? 'bg-accent text-white rounded-br-sm' : 'bg-card border border-app text-primary rounded-bl-sm'}`}>
+            <ImageAlbum images={images} />
+            {files.map(f => (
+              <a key={f.id} href={f.url} target="_blank" rel="noreferrer"
+                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold no-underline mb-1
+                  ${isMine ? 'bg-white/20 text-white' : 'bg-raised text-primary'}`}>
+                📄 {f.name}
+              </a>
+            ))}
+            {msg.text && <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.text}</p>}
+          </div>
+
+          {showActions && (
+            <div className={`absolute bottom-full mb-1 z-20 flex items-center gap-1 bg-surface border border-app rounded-xl p-1 shadow-xl
+              ${isMine ? 'right-0' : 'left-0'}`}>
+              <button onClick={() => { setShowEmoji(true); setShowActions(false) }}
+                className="p-1.5 hover:bg-raised rounded-lg text-sm cursor-pointer bg-transparent border-none">😊</button>
+              <button onClick={() => { onReply(); setShowActions(false) }}
+                className="p-1.5 hover:bg-raised rounded-lg text-sm cursor-pointer bg-transparent border-none">↩️</button>
+              {onDelete && (
+                <button onClick={() => { if (window.confirm('Delete this message?')) onDelete(); setShowActions(false) }}
+                  className="p-1.5 hover:bg-danger-soft rounded-lg text-sm cursor-pointer bg-transparent border-none text-danger">🗑</button>
+              )}
+            </div>
+          )}
+
+          {showEmoji && (
+            <div className={`absolute bottom-full mb-1 z-20 flex gap-1 bg-surface border border-app rounded-xl p-2 shadow-xl
+              ${isMine ? 'right-0' : 'left-0'}`}>
+              {EMOJIS.map(e => (
+                <button key={e} onClick={() => { onReact(e); setShowEmoji(false) }}
+                  className="text-lg hover:scale-125 transition-transform cursor-pointer bg-transparent border-none p-0.5">{e}</button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {hasReactions && (
+          <div className="flex flex-wrap gap-1 mt-1">
+            {Object.entries(msg.reactions).map(([emoji, users]) => users.length > 0 && (
+              <button key={emoji} onClick={() => onReact(emoji)}
+                className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-raised border border-app text-xs cursor-pointer hover:border-accent">
+                {emoji} <span className="text-muted">{users.length}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        <p className="text-[10px] text-dim mt-0.5 px-1">{fmtTime(msg.createdAt)}</p>
+      </div>
+    </div>
+  )
+}
+
+// ── DM Picker ─────────────────────────────────────────────────────────────────
+function DMPicker({ myId, chats, onSelect, onClose, createChat }) {
+  const [q, setQ]       = useState('')
+  const [users, setUsers] = useState([])
+  const [busy, setBusy]   = useState(false)
+
+  useEffect(() => {
+    import('firebase/firestore').then(({ collection, getDocs }) =>
+      import('../../utils/firebase').then(({ db }) =>
+        getDocs(collection(db, 'users')).then(snap => {
+          setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(u => u.id !== myId))
+        })
+      )
+    )
+  }, [])
+
+  const filtered = users.filter(u => `${u.firstName} ${u.lastName}`.toLowerCase().includes(q.toLowerCase()))
+
+  const handleSelect = async (u) => {
+    // Check for existing DM
+    const existing = chats.find(c =>
+      !c.isGroup && c.members?.includes(myId) && c.members?.includes(u.id)
+    )
+    if (existing) { onSelect(existing.id); return }
+    setBusy(true)
+    try {
+      const id = await createChat({
+        name: `${u.firstName} ${u.lastName}`,
+        members: [myId, u.id],
+        isGroup: false,
+        createdBy: myId,
+      })
+      onSelect(id)
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 px-4 pb-6" onClick={onClose}>
+      <div className="w-full max-w-sm bg-surface rounded-3xl overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="flex justify-center pt-3 pb-1"><div className="w-10 h-1 rounded-full bg-raised" /></div>
+        <div className="px-4 pb-2">
+          <p className="text-base font-bold text-primary mb-3">New direct message</p>
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search people…" autoFocus
+            className="w-full bg-raised border border-app rounded-xl px-3 py-2.5 text-sm text-primary placeholder:text-dim outline-none focus:border-accent mb-2" />
+          <div className="max-h-60 overflow-y-auto flex flex-col gap-1">
+            {filtered.map(u => (
+              <button key={u.id} onClick={() => handleSelect(u)} disabled={busy}
+                className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-raised cursor-pointer text-left w-full border-none bg-transparent">
+                <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
+                  style={{ background: u.color || 'var(--accent)' }}>
+                  {u.firstName?.[0]}{u.lastName?.[0]}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold text-primary">{u.firstName} {u.lastName}</p>
+                    {['owner','admin'].includes(u.role) && (
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-accent-soft text-accent font-semibold">
+                        {u.role === 'owner' ? '👑' : '🛡️'} {u.role}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-dim capitalize">{u.role === 'teacher' ? 'Teacher' : ''}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="px-4 pb-4">
+          <button onClick={onClose} className="w-full py-3 rounded-xl border border-app text-sm font-semibold text-muted cursor-pointer bg-transparent">Cancel</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────────
+export default function ChatView() {
+  const {
+    chats, messages, activeChatId, loading,
+    setActiveChat, markChatRead, sendMessage,
+    addReaction, deleteMessage, deleteChat, createChat,
+  } = useChatStore()
+  const { user, userProfile } = useAuthStore()
+
+  const [showList,    setShowList]    = useState(true)
+  const [q,          setQ]           = useState('')
+  const [msgText,    setMsgText]     = useState('')
+  const [replyTo,    setReplyTo]     = useState(null)
+  const [attachments,setAttachments] = useState([])
+  const [uploading,  setUploading]   = useState(false)
+  const [sending,    setSending]     = useState(false)
+  const [showDMPick, setShowDMPick]  = useState(false)
+
+  const inputRef   = useRef(null)
+  const fileRef    = useRef(null)
+  const msgListRef = useRef(null)
+
+  const activeChat = chats.find(c => c.id === activeChatId)
+  const activeMsgs = messages[activeChatId] || []
+
+  // Only show group chats + own DMs
+  const myChats = chats.filter(c => c.isGroup || (c.members || []).includes(user?.uid))
+  const filtered = myChats.filter(c => (c.name || '').toLowerCase().includes(q.toLowerCase()))
+
+  useEffect(() => {
+    if (msgListRef.current) msgListRef.current.scrollTop = msgListRef.current.scrollHeight
+    if (activeChatId && user) markChatRead(activeChatId, user.uid)
+  }, [activeMsgs.length, activeChatId])
+
+  const handleFileUpload = async (e) => {
+    const files = Array.from(e.target.files)
+    if (!files.length) return
+    setUploading(true)
+    try {
+      const added = []
+      for (const f of files) {
+        let processed = f
+        try { processed = await resizeFile(f) } catch {}
+        const snap = await uploadBytes(stRef(storage, `chat_attachments/${uid()}_${processed.name}`), processed)
+        const url  = await getDownloadURL(snap.ref)
+        added.push({ id: uid(), name: f.name, url, type: f.type })
+      }
+      setAttachments(prev => [...prev, ...added])
+    } catch (e) { console.error(e) }
+    finally { setUploading(false); if (fileRef.current) fileRef.current.value = '' }
+  }
+
+  const handleSend = async () => {
+    if ((!msgText.trim() && !attachments.length) || !activeChatId || sending) return
+    setSending(true)
+    try {
+      await sendMessage(activeChatId, {
+        text: msgText.trim(),
+        attachments,
+        replyTo: replyTo ? { id: replyTo.id, text: replyTo.text, authorName: replyTo.authorName } : null,
+        authorId:   user?.uid,
+        authorName: `${userProfile?.firstName || ''} ${userProfile?.lastName || ''}`.trim(),
+      })
+      setMsgText(''); setAttachments([]); setReplyTo(null)
+    } finally { setSending(false) }
+  }
+
+  const unread = (chat) => {
+    const lastReadTs = chat.lastRead?.[user?.uid]?.seconds || 0
+    return (messages[chat.id] || []).filter(m =>
+      m.authorId !== user?.uid && (m.createdAt?.seconds || 0) > lastReadTs
+    ).length
+  }
+
+  if (loading) return (
+    <div className="h-full flex items-center justify-center bg-app">
+      <div className="w-7 h-7 rounded-full border-2 border-accent border-t-transparent animate-spin" />
+    </div>
+  )
+
+  return (
+    <div className="h-full flex flex-col overflow-hidden bg-app">
+
+      {/* Chat list */}
+      {showList && (
+        <div className="flex flex-col h-full">
+          <div className="px-4 pt-4 pb-3 border-b border-app flex-shrink-0">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base font-bold text-primary">Messages</h2>
+              <button onClick={() => setShowDMPick(true)}
+                className="w-8 h-8 rounded-xl bg-accent-soft text-accent flex items-center justify-center text-lg cursor-pointer border-none bg-transparent">
+                ✏️
+              </button>
+            </div>
+            <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search…"
+              className="w-full bg-raised border border-app rounded-xl px-3 py-2 text-sm text-primary placeholder:text-dim outline-none focus:border-accent" />
+          </div>
+
+          <div className="flex-1 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <p className="text-3xl mb-2">💬</p>
+                <p className="text-sm text-muted">No conversations yet</p>
+              </div>
+            ) : filtered.map(chat => {
+              const u = unread(chat)
+              return (
+                <div key={chat.id}
+                  onClick={() => { setActiveChat(chat.id); setShowList(false) }}
+                  className={`group flex items-center gap-3 px-4 py-3 cursor-pointer border-b border-app/30 transition-colors
+                    ${activeChatId === chat.id ? 'bg-accent-soft' : 'hover:bg-raised'}`}>
+                  <div className="w-10 h-10 rounded-xl bg-raised border border-app flex items-center justify-center text-lg flex-shrink-0">
+                    {chat.isGroup ? '👥' : '💬'}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-primary truncate">{chat.name}</p>
+                    <p className="text-xs text-dim truncate mt-0.5">{chat.lastMessage || 'No messages yet'}</p>
+                  </div>
+                  <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                    {u > 0 && (
+                      <span className="min-w-[18px] h-[18px] rounded-full bg-accent text-white text-[9px] font-bold flex items-center justify-center px-1">
+                        {u > 9 ? '9+' : u}
+                      </span>
+                    )}
+                    {chat.createdBy === user?.uid && (
+                      <button onClick={e => { e.stopPropagation(); if (window.confirm('Delete this chat?')) { deleteChat(chat.id); setActiveChat(null) } }}
+                        className="hidden group-hover:flex text-danger text-xs p-1 rounded cursor-pointer bg-transparent border-none hover:bg-danger-soft">🗑</button>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Message pane */}
+      {!showList && activeChatId && (
+        <div className="flex flex-col h-full overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center gap-3 px-4 py-3 bg-surface border-b border-app flex-shrink-0">
+            <button onClick={() => { setShowList(true); setActiveChat(null) }}
+              className="w-8 h-8 rounded-xl bg-raised border border-app flex items-center justify-center text-muted text-lg cursor-pointer border-none bg-transparent">
+              ‹
+            </button>
+            <div className="w-9 h-9 rounded-xl bg-accent-soft flex items-center justify-center text-base flex-shrink-0">
+              {activeChat?.isGroup ? '👥' : '💬'}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-primary truncate">{activeChat?.name}</p>
+              <p className="text-xs text-dim">{activeChat?.isGroup ? 'Group chat' : 'Direct message'}</p>
+            </div>
+            {activeChat?.createdBy === user?.uid && (
+              <button onClick={() => { if (window.confirm('Delete this chat?')) { deleteChat(activeChatId); setActiveChat(null); setShowList(true) } }}
+                className="w-8 h-8 flex items-center justify-center text-danger cursor-pointer bg-transparent border-none hover:bg-danger-soft rounded-xl">🗑</button>
+            )}
+          </div>
+
+          {/* Messages */}
+          <div ref={msgListRef} className="flex-1 overflow-y-auto px-4 py-4">
+            {activeMsgs.length === 0 ? (
+              <div className="flex items-center justify-center h-full">
+                <p className="text-sm text-muted">No messages yet — say hello!</p>
+              </div>
+            ) : activeMsgs.map(msg => {
+              const isMine = msg.authorId === user?.uid
+              return (
+                <div key={msg.id}>
+                  {!isMine && activeChat?.isGroup && (
+                    <p className="text-xs text-muted font-semibold mb-1 ml-1">{msg.authorName}</p>
+                  )}
+                  <Bubble
+                    msg={msg}
+                    isMine={isMine}
+                    onReact={(emoji) => addReaction(activeChatId, msg.id, emoji, user?.uid)}
+                    onReply={() => { setReplyTo(msg); inputRef.current?.focus() }}
+                    onDelete={isMine ? () => deleteMessage(activeChatId, msg.id) : null}
+                  />
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Reply preview */}
+          {replyTo && (
+            <div className="flex items-center gap-2 px-4 py-2 bg-raised border-t border-app flex-shrink-0">
+              <div className="flex-1 border-l-2 border-accent pl-2">
+                <p className="text-xs font-semibold text-accent">{replyTo.authorName}</p>
+                <p className="text-xs text-dim truncate">{replyTo.text || '📎 Attachment'}</p>
+              </div>
+              <button onClick={() => setReplyTo(null)} className="text-dim text-lg cursor-pointer bg-transparent border-none">×</button>
+            </div>
+          )}
+
+          {/* Attachments preview */}
+          {attachments.length > 0 && (
+            <div className="flex gap-2 px-4 py-2 border-t border-app flex-shrink-0 flex-wrap">
+              {attachments.map(a => (
+                <div key={a.id} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-raised border border-app rounded-xl text-xs">
+                  <span>{a.type?.startsWith('image/') ? '🖼️' : '📄'}</span>
+                  <span className="text-muted max-w-[80px] truncate">{a.name}</span>
+                  <button onClick={() => setAttachments(prev => prev.filter(x => x.id !== a.id))}
+                    className="text-dim cursor-pointer bg-transparent border-none ml-1">×</button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Input */}
+          <div className="px-3 py-3 bg-surface border-t border-app flex items-end gap-2 flex-shrink-0"
+            style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom, 0px))' }}>
+            <button onClick={() => fileRef.current?.click()} disabled={uploading}
+              className="w-9 h-9 rounded-xl bg-raised border border-app flex items-center justify-center text-muted cursor-pointer disabled:opacity-50 bg-transparent flex-shrink-0">
+              {uploading ? '⏳' : '📎'}
+            </button>
+            <input ref={fileRef} type="file" multiple accept="image/*,video/*,.pdf" className="hidden" onChange={handleFileUpload} />
+            <div className="flex-1 bg-raised border border-app rounded-2xl px-3.5 py-2.5">
+              <textarea ref={inputRef} value={msgText}
+                onChange={e => setMsgText(e.target.value)}
+                placeholder="Message…" rows={1}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
+                style={{ resize: 'none', maxHeight: 100, overflow: 'auto' }}
+                className="w-full bg-transparent text-sm text-primary placeholder:text-dim outline-none resize-none" />
+            </div>
+            <button onClick={handleSend}
+              disabled={(!msgText.trim() && !attachments.length) || sending}
+              className="w-9 h-9 rounded-xl bg-accent text-white flex items-center justify-center cursor-pointer border-none disabled:opacity-40 flex-shrink-0">
+              {sending ? '…' : '➤'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* DM Picker */}
+      {showDMPick && (
+        <DMPicker
+          myId={user?.uid}
+          chats={chats}
+          onSelect={(id) => { setActiveChat(id); setShowList(false); setShowDMPick(false) }}
+          onClose={() => setShowDMPick(false)}
+          createChat={createChat}
+        />
+      )}
+    </div>
+  )
+}
