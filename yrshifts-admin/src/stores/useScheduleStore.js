@@ -18,17 +18,60 @@ const useScheduleStore = create((set, get) => ({
   _unsubs:        [],
 
   init() {
+    // Load from cache if exists
+    try {
+      const cachedShifts = localStorage.getItem('shifthub_rawShifts')
+      const cachedJobs = localStorage.getItem('shifthub_jobs')
+      const cachedTemplates = localStorage.getItem('shifthub_savedTemplates')
+      
+      const updateObj = {}
+      let hasCachedData = false
+      if (cachedShifts) {
+        const shifts = JSON.parse(cachedShifts)
+        updateObj.rawShifts = shifts
+        updateObj.schedule = groupShifts(shifts)
+        hasCachedData = true
+      }
+      if (cachedJobs) {
+        updateObj.jobs = JSON.parse(cachedJobs)
+      }
+      if (cachedTemplates) {
+        updateObj.savedTemplates = JSON.parse(cachedTemplates)
+      }
+      if (hasCachedData) {
+        updateObj.loading = false
+      }
+      if (Object.keys(updateObj).length > 0) {
+        set(updateObj)
+      }
+    } catch (e) {
+      console.warn('Error loading cached schedule settings:', e)
+    }
+
     // Listen to shifts
     const unsubShifts = onSnapshot(collection(db, 'shifts'), (snap) => {
       const shifts = snap.docs.map(d => ({ id: d.id, ...d.data() }))
       set({ rawShifts: shifts, schedule: groupShifts(shifts), loading: false })
+      try {
+        localStorage.setItem('shifthub_rawShifts', JSON.stringify(shifts))
+      } catch (e) {
+        console.warn('Error saving shifts to cache:', e)
+      }
     })
 
     // Listen to company settings (jobs + templates)
     const unsubSettings = onSnapshot(doc(db, 'settings', 'company'), (snap) => {
       if (snap.exists()) {
         const d = snap.data()
-        set({ jobs: d.jobs || [], savedTemplates: d.templates || [] })
+        const jobs = d.jobs || []
+        const templates = d.templates || []
+        set({ jobs, savedTemplates: templates })
+        try {
+          localStorage.setItem('shifthub_jobs', JSON.stringify(jobs))
+          localStorage.setItem('shifthub_savedTemplates', JSON.stringify(templates))
+        } catch (e) {
+          console.warn('Error saving company settings to cache:', e)
+        }
       }
     })
 
@@ -77,9 +120,22 @@ const useScheduleStore = create((set, get) => ({
   async saveShift(updatedShift, dates, action, scope, ctxShift, ctxDateKey, isNew, instructors, sms) {
     const batch = writeBatch(db)
 
+    const wasConfirmed = ctxShift && ctxShift.confirmationStatus === 'confirmed'
+    const timeChanged = ctxShift && (updatedShift.start !== ctxShift.start || updatedShift.end !== ctxShift.end)
+    const dayChanged = ctxShift && (updatedShift.date !== ctxShift.date)
+    const dayOrTimeChanged = timeChanged || dayChanged
+
     if (action === 'publish') {
-      if (updatedShift.claimable)     updatedShift.instructorId = null
-      if (updatedShift.instructorId)  updatedShift.confirmationStatus = 'pending'
+      if (updatedShift.claimable) {
+        updatedShift.instructorId = null
+        updatedShift.confirmationStatus = null
+      } else if (updatedShift.instructorId) {
+        if (wasConfirmed && !dayOrTimeChanged) {
+          updatedShift.confirmationStatus = 'confirmed'
+        } else {
+          updatedShift.confirmationStatus = 'pending'
+        }
+      }
     }
 
     if ((scope === 'all' || scope === 'future') && ctxShift) {
@@ -87,7 +143,27 @@ const useScheduleStore = create((set, get) => ({
       related.forEach(ds => {
         const s = ds.data()
         const inScope = scope === 'all' || (scope === 'future' && s.date >= ctxDateKey)
-        if (inScope) batch.update(ds.ref, { ...updatedShift, id: s.id, date: s.date })
+        if (inScope) {
+          let sConfirmationStatus = s.confirmationStatus
+          if (action === 'publish') {
+            if (updatedShift.claimable) {
+              sConfirmationStatus = null
+            } else if (updatedShift.instructorId) {
+              const sWasConfirmed = s.confirmationStatus === 'confirmed'
+              if (sWasConfirmed && !dayOrTimeChanged) {
+                sConfirmationStatus = 'confirmed'
+              } else {
+                sConfirmationStatus = 'pending'
+              }
+            }
+          }
+          batch.update(ds.ref, { 
+            ...updatedShift, 
+            id: s.id, 
+            date: s.date,
+            confirmationStatus: sConfirmationStatus
+          })
+        }
       })
     } else {
       const allDates = Array.isArray(dates) ? dates : [ctxDateKey || updatedShift.date]
@@ -113,7 +189,23 @@ const useScheduleStore = create((set, get) => ({
         } else if (updatedShift.instructorId) {
           const inst = instructors.find(i => String(i.id) === String(updatedShift.instructorId))
           if (inst) {
-            sms.send([{ to: `${inst.firstName} ${inst.lastName}`, text: 'You have new shift(s)' }])
+            let smsText = 'You have new shift(s)'
+            let notifMessageText = null
+            let subjectText = null
+
+            if (wasConfirmed) {
+              if (dayOrTimeChanged) {
+                smsText = 'important changes to a shift you have already confirmed, please confirm again'
+                notifMessageText = 'important changes to a shift you have already confirmed, please confirm again'
+                subjectText = 'Important changes to confirmed shift — please confirm again'
+              } else {
+                smsText = 'details added'
+                notifMessageText = 'details added'
+                subjectText = 'Shift details updated'
+              }
+            }
+
+            sms.send([{ to: `${inst.firstName} ${inst.lastName}`, text: smsText }])
             await createNotification({
               type: 'shift_assigned', recipientId: String(inst.id),
               recipientName: inst.firstName, actorName: 'Admin',
@@ -121,6 +213,8 @@ const useScheduleStore = create((set, get) => ({
               shiftTitle: updatedShift.title || 'Shift',
               shiftStart: updatedShift.start, shiftEnd: updatedShift.end,
               forAdmin: false,
+              message: notifMessageText,
+              subject: subjectText,
             })
           }
         }

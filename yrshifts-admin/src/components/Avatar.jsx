@@ -1,7 +1,7 @@
 import { useRef } from 'react'
 import { getInitials } from '../utils/helpers'
 
-export default function Avatar({ firstName, lastName, color, photo, size = 32, onUpload }) {
+export default function Avatar({ firstName, lastName, color, photo, icon, size = 32, onUpload }) {
   const fileRef = useRef(null)
 
   const handleFile = (e) => {
@@ -31,7 +31,11 @@ export default function Avatar({ firstName, lastName, color, photo, size = 32, o
       className={`flex-shrink-0 rounded-full flex items-center justify-center font-bold text-white relative ${cursor}`}
       style={{ ...sizeStyle, background: color || '#4EA8D6' }}
     >
-      {getInitials(firstName, lastName)}
+      {icon ? (
+        <span style={{ fontSize: size * 0.5, lineHeight: 1 }}>{icon}</span>
+      ) : (
+        getInitials(firstName, lastName)
+      )}
       {onUpload && (
         <>
           <div

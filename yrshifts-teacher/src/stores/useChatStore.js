@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import {
   collection, doc, onSnapshot, addDoc,
-  updateDoc, deleteDoc, query, orderBy,
+  updateDoc, deleteDoc, query, orderBy, where,
   serverTimestamp, writeBatch, getDocs,
 } from 'firebase/firestore'
 import { db } from '../utils/firebase'
@@ -13,8 +13,13 @@ const useChatStore = create((set, get) => ({
   loading:      true,
   _unsubs:      [],
 
-  init() {
-    const unsubChats = onSnapshot(collection(db, 'chats'), (snap) => {
+  init(userId) {
+    if (!userId) return
+    const chatsQuery = query(
+      collection(db, 'chats'),
+      where('members', 'array-contains', userId)
+    )
+    const unsubChats = onSnapshot(chatsQuery, (snap) => {
       const chats = snap.docs
         .map(d => ({ id: d.id, ...d.data() }))
         .sort((a, b) => {
@@ -26,6 +31,37 @@ const useChatStore = create((set, get) => ({
         })
       set({ chats, loading: false })
 
+      // garbage collect deleted or removed chat listeners
+      const currentChatIds = chats.map(c => c.id)
+      const unsubsToKeep = []
+      const unsubsToRemove = []
+
+      get()._unsubs.forEach(unsub => {
+        // If it's a message listener and its chat is no longer in currentChatIds, clean it up!
+        if (unsub._chatId && unsub._chatId !== 'root-chats' && !currentChatIds.includes(unsub._chatId)) {
+          unsubsToRemove.push(unsub)
+        } else {
+          unsubsToKeep.push(unsub)
+        }
+      })
+
+      // Unsubscribe and delete local messages
+      unsubsToRemove.forEach(unsub => {
+        try { unsub() } catch (err) { console.error('Unsub error:', err) }
+      })
+
+      set(s => {
+        const nextMessages = { ...s.messages }
+        unsubsToRemove.forEach(unsub => {
+          delete nextMessages[unsub._chatId]
+        })
+        return {
+          _unsubs: unsubsToKeep,
+          messages: nextMessages
+        }
+      })
+
+      // Establish new message listeners
       chats.forEach(chat => {
         if (get()._unsubs.some(u => u._chatId === chat.id)) return
         const q = query(collection(db, 'chats', chat.id, 'messages'), orderBy('createdAt', 'asc'))
@@ -41,6 +77,7 @@ const useChatStore = create((set, get) => ({
         set(s => ({ _unsubs: [...s._unsubs, unsub] }))
       })
     })
+    unsubChats._chatId = 'root-chats'
     set(s => ({ _unsubs: [...s._unsubs, unsubChats] }))
   },
 
@@ -132,7 +169,7 @@ const useChatStore = create((set, get) => ({
     await updateDoc(doc(db, 'chats', chatId, 'messages', msgId), { reactions })
   },
 
-  async createChat({ name, members, isGroup, createdBy }) {
+  async createChat({ name, members, isGroup, createdBy, icon, color, photo }) {
     const ref = await addDoc(collection(db, 'chats'), {
       name:        name || '',
       members:     members || [],
@@ -142,6 +179,9 @@ const useChatStore = create((set, get) => ({
       lastMessage: '',
       lastAt:      serverTimestamp(),
       pinnedAt:    null,
+      icon:        icon || null,
+      color:       color || null,
+      photo:       photo || null,
     })
     return ref.id
   },

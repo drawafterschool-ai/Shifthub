@@ -23,12 +23,14 @@ export const NOTIF_ICONS = {
   shift_confirmed: '✅',
   shift_rejected:  '❌',
   shift_claimed:   '⚡',
+  shift_unconfirmed: '⚠️',
   shift_edited:    '✏️',
   shift_deleted:   '🗑',
   shift_reminder:  '⏰',
   // People
   instructor_joined: '👋',
   instructor_left:   '👤',
+  first_login:       '🎉',
   // Chat
   chat_message:    '💬',
   chat_reaction:   '😊',
@@ -45,11 +47,13 @@ export const NOTIF_COLORS = {
   shift_confirmed: 'text-ok',
   shift_rejected:  'text-danger',
   shift_claimed:   'text-warn',
+  shift_unconfirmed: 'text-warn',
   shift_edited:    'text-muted',
   shift_deleted:   'text-danger',
   shift_reminder:  'text-warn',
   instructor_joined: 'text-ok',
   instructor_left:   'text-muted',
+  first_login:       'text-ok',
   chat_message:    'text-purple-400',
   chat_reaction:   'text-pink-400',
   buzz_posted:     'text-warn',
@@ -59,8 +63,8 @@ export const NOTIF_COLORS = {
 }
 
 // ── Tab groups ────────────────────────────────────────────────────────────────
-export const SHIFT_TYPES   = ['shift_assigned','shift_confirmed','shift_rejected','shift_claimed','shift_edited','shift_deleted','shift_reminder']
-export const PEOPLE_TYPES  = ['instructor_joined','instructor_left']
+export const SHIFT_TYPES   = ['shift_assigned','shift_confirmed','shift_rejected','shift_claimed','shift_unconfirmed','shift_edited','shift_deleted','shift_reminder']
+export const PEOPLE_TYPES  = ['instructor_joined','instructor_left','first_login']
 export const CHAT_TYPES    = ['chat_message','chat_reaction']
 export const BUZZ_TYPES    = ['buzz_posted','buzz_like','buzz_comment','buzz_seen']
 
@@ -74,13 +78,15 @@ export const notifMessage = (n) => {
   switch (n.type) {
     // Shifts
     case 'shift_assigned':
-      return `New shift assigned on ${date}${time ? ' at ' + time : ''} — ${shift}`
+      return n.message || `New shift assigned on ${date}${time ? ' at ' + time : ''} — ${shift}`
     case 'shift_confirmed':
       return `${name} confirmed their shift on ${date}${time ? ' at ' + time : ''}`
     case 'shift_rejected':
       return `${name} rejected their shift on ${date}${time ? ' at ' + time : ''} — needs reassignment`
     case 'shift_claimed':
       return `${name} claimed the open shift on ${date}${time ? ' at ' + time : ''}`
+    case 'shift_unconfirmed':
+      return `${name} has not confirmed their shift on ${date}${time ? ' at ' + time : ''} — starts in ~5 hours!`
     case 'shift_edited':
       return `${name} edited "${shift}"${date ? ' on ' + date : ''}`
     case 'shift_deleted':
@@ -92,6 +98,8 @@ export const notifMessage = (n) => {
       return `${name} joined as a teacher`
     case 'instructor_left':
       return `${name} was removed from the team`
+    case 'first_login':
+      return `${name} logged in for the first time`
     // Chat
     case 'chat_message':
       return `${name} in ${n.chatName || 'a chat'}: ${n.preview || 'sent a message'}`

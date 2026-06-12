@@ -9,8 +9,13 @@ for (let h = 0; h < 24; h++) {
 }
 
 export const timeTo24 = (t) => {
-  const [time, period] = t.split(' ')
+  if (!t || typeof t !== 'string') return 0
+  const parts = t.trim().split(' ')
+  const [time, period] = parts
+  if (!time) return 0
   let [h, m] = time.split(':').map(Number)
+  if (isNaN(h)) h = 0
+  if (isNaN(m)) m = 0
   if (period === 'PM' && h !== 12) h += 12
   if (period === 'AM' && h === 12) h = 0
   return h * 60 + m

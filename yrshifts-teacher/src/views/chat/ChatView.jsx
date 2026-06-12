@@ -4,6 +4,8 @@ import { storage }    from '../../utils/firebase'
 import useChatStore    from '../../stores/useChatStore'
 import useAuthStore    from '../../stores/useAuthStore'
 import useTeacherStore from '../../stores/useTeacherStore'
+import useDirectoryStore from '../../stores/useDirectoryStore'
+import Avatar          from '../../components/Avatar'
 import { uid }         from '../../utils/helpers'
 
 const EMOJIS = ['👍','❤️','😂','🎉','🔥','👀','🙌','✅','😮','😢']
@@ -11,12 +13,14 @@ const EMOJIS = ['👍','❤️','😂','🎉','🔥','👀','🙌','✅','😮',
 function fmtTime(ts) {
   if (!ts) return ''
   const d = ts.seconds ? new Date(ts.seconds * 1000) : new Date(ts)
+  if (isNaN(d.getTime())) return ''
   return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
 }
 
 function fmtChatTime(ts) {
   if (!ts) return ''
   const d    = ts.seconds ? new Date(ts.seconds * 1000) : new Date(ts)
+  if (isNaN(d.getTime())) return ''
   const diff = Date.now() - d
   if (diff < 60000)    return 'Now'
   if (diff < 3600000)  return `${Math.floor(diff / 60000)}m`
@@ -24,12 +28,40 @@ function fmtChatTime(ts) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
+const getChatProfile = (chat, currentUser, instructors) => {
+  if (!chat) return { name: '', photo: null, color: '#6366F1', firstName: '', lastName: '', icon: null }
+  if (chat.isGroup) {
+    return {
+      name: chat.name,
+      photo: chat.photo || null,
+      color: chat.color || '#4EA8D6',
+      icon: chat.icon || null,
+      firstName: chat.name,
+      lastName: ''
+    }
+  }
+  const otherId = chat.members?.find(id => id !== currentUser?.uid)
+  const otherUser = instructors?.find(i => i.id === otherId)
+  if (otherUser) {
+    return {
+      name: `${otherUser.firstName} ${otherUser.lastName || ''}`.trim(),
+      photo: otherUser.photo || null,
+      color: otherUser.color || '#6366F1',
+      firstName: otherUser.firstName,
+      lastName: otherUser.lastName || '',
+      icon: null
+    }
+  }
+  return { name: chat.name, photo: null, color: '#6366F1', firstName: chat.name, lastName: '', icon: null }
+}
+
 // ── Forward sheet ─────────────────────────────────────────────────────────────
 function ForwardSheet({ text, chats, onClose, onForward }) {
   const [q, setQ] = useState('')
-  const filtered  = chats.filter(c => (c.name || '').toLowerCase().includes(q.toLowerCase()))
+  const myChats   = chats.filter(c => c.isGroup || (c.members || []).includes(user?.uid))
+  const filtered  = myChats.filter(c => (c.name || '').toLowerCase().includes(q.toLowerCase()))
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/50" onClick={onClose}>
+    <div className="absolute inset-0 z-50 flex flex-col justify-end bg-black/50" onClick={onClose}>
       <div className="bg-surface rounded-t-3xl overflow-hidden animate-slide-up" onClick={e => e.stopPropagation()}>
         <div className="px-4 pt-4 pb-2 border-b border-app">
           <div className="w-10 h-1 rounded-full bg-raised mx-auto mb-3" />
@@ -70,12 +102,12 @@ function Bubble({ msg, isMine, onReact, onReply, onForward, onDelete }) {
   const hasReactions = msg.reactions && Object.keys(msg.reactions).some(k => msg.reactions[k]?.length > 0)
 
   return (
-    <div className={`flex flex-col gap-1 ${isMine ? 'items-end' : 'items-start'}`}>
-      {!isMine && <span className="text-xs font-semibold text-accent px-1">{msg.authorName}</span>}
+    <div className={`w-full flex flex-col gap-1.5 ${isMine ? 'items-end' : 'items-start'}`}>
+      {!isMine && <span className="text-sm font-semibold text-accent px-1">{msg.authorName}</span>}
 
       {/* Reply preview */}
       {msg.replyTo && (
-        <div className={`max-w-[80%] px-3 py-1.5 rounded-xl border-l-2 border-accent text-xs mb-0.5
+        <div className={`max-w-[85%] md:max-w-[500px] px-4 py-2 rounded-xl border-l-2 border-accent text-sm mb-0.5
           ${isMine ? 'bg-white/10 self-end' : 'bg-raised'}`}>
           <span className="font-semibold text-accent">{msg.replyTo.authorName} </span>
           <span className="text-muted">{msg.replyTo.text?.slice(0, 50)}</span>
@@ -83,10 +115,10 @@ function Bubble({ msg, isMine, onReact, onReply, onForward, onDelete }) {
       )}
 
       {/* Bubble + long-press actions */}
-      <div className={`flex items-end gap-2 ${isMine ? 'flex-row-reverse' : ''}`}>
+      <div className={`flex items-end gap-2.5 max-w-[85%] md:max-w-[500px] ${isMine ? 'flex-row-reverse' : ''}`}>
         <div
-          className={`relative max-w-[78vw] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed cursor-pointer select-none
-            ${isMine ? 'bg-accent text-white rounded-br-sm' : 'bg-card border border-app text-primary rounded-bl-sm'}`}
+          className={`relative min-w-[70px] px-6 py-3 rounded-3xl text-base leading-relaxed cursor-pointer select-none
+            ${isMine ? 'bg-accent text-white' : 'bg-card border border-app text-primary'}`}
           onClick={() => setShowActions(v => !v)}
         >
           {msg.attachments?.map(a => (
@@ -102,10 +134,25 @@ function Bubble({ msg, isMine, onReact, onReply, onForward, onDelete }) {
               )}
             </div>
           ))}
-          {msg.text && <p className="whitespace-pre-wrap break-words">{msg.text}</p>}
-          <p className={`text-[10px] mt-1 text-right ${isMine ? 'text-white/60' : 'text-dim'}`}>
-            {fmtTime(msg.createdAt)}
-          </p>
+          {(msg.text || msg.createdAt) && (
+            <div className="text-base leading-snug break-words whitespace-pre-wrap">
+              {msg.text ? (
+                <span>{msg.text}</span>
+              ) : null}
+              {msg.createdAt && (
+                <span className="inline-flex items-center gap-1 select-none text-[10px] font-medium leading-none ml-2.5 align-baseline whitespace-nowrap">
+                  <span className={isMine ? 'text-white/70' : 'text-dim'}>
+                    {fmtTime(msg.createdAt)}
+                  </span>
+                  {isMine && (
+                    <span className="text-white/80 leading-none text-xs ml-0.5 select-none font-bold tracking-tighter">
+                      ✓✓
+                    </span>
+                  )}
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Inline action buttons (visible after tap) */}
@@ -163,6 +210,12 @@ export default function ChatView() {
   const { chats, messages, activeChatId, loading, setActiveChat, markChatRead, sendMessage, addReaction, pinChat, deleteMessage, deleteChat } = useChatStore()
   const { user, userProfile }  = useAuthStore()
   const { _userId }            = useTeacherStore()
+  const { instructors }        = useDirectoryStore()
+
+  useEffect(() => {
+    useDirectoryStore.getState().init()
+    return () => useDirectoryStore.getState().cleanup()
+  }, [])
 
   const [msgText,     setMsgText]     = useState('')
   const [replyTo,     setReplyTo]     = useState(null)
@@ -239,10 +292,10 @@ export default function ChatView() {
   // ── Chat list panel ────────────────────────────────────────────────────────
   if (showList) return (
     <div className="h-full flex flex-col bg-app">
-      <div className="px-4 py-3 bg-surface border-b border-app flex items-center justify-between">
-        <h2 className="text-base font-bold text-primary">Chat</h2>
+      <div className="px-5 py-4 bg-surface border-b border-app flex items-center justify-between">
+        <h2 className="text-lg font-bold text-primary">Chat</h2>
         <button onClick={() => setShowDMPicker(true)}
-          className="w-8 h-8 rounded-xl bg-accent text-white flex items-center justify-center text-lg font-bold cursor-pointer border-none">
+          className="w-10 h-10 rounded-xl bg-accent text-white flex items-center justify-center text-xl font-bold cursor-pointer border-none">
           ✏️
         </button>
       </div>
@@ -254,31 +307,32 @@ export default function ChatView() {
         ) : chats.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center px-6">
             <p className="text-3xl mb-2">💬</p>
-            <p className="text-sm font-semibold text-muted">No conversations yet</p>
-            <p className="text-xs text-dim mt-1 mb-4">Tap ✏️ to message a colleague</p>
+            <p className="text-base font-semibold text-muted">No conversations yet</p>
+            <p className="text-sm text-dim mt-1 mb-4">Tap ✏️ to message a colleague</p>
           </div>
         ) : chats.map(chat => (
           <div key={chat.id} className="relative group">
             <button onClick={() => openChat(chat.id)}
-              className="flex items-center gap-3 w-full px-4 py-3.5 text-left cursor-pointer bg-transparent border-none border-b border-app/20 hover:bg-raised transition-colors">
-              <div className="w-11 h-11 rounded-full bg-accent-soft flex items-center justify-center text-xl flex-shrink-0">
-                {chat.isGroup ? '👥' : '💬'}
-              </div>
+              className="flex items-center gap-4 w-full px-5 py-4 text-left cursor-pointer bg-transparent border-none border-b border-app/20 hover:bg-raised transition-colors">
+              {(() => {
+                const profile = getChatProfile(chat, user, instructors)
+                return <Avatar firstName={profile.firstName} lastName={profile.lastName} color={profile.color} photo={profile.photo} icon={profile.icon} size={48} />
+              })()}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
-                  {chat.pinnedAt && <span className="text-xs">📌</span>}
-                  <p className="text-sm font-bold text-primary truncate">{chat.name}</p>
+                  {chat.pinnedAt && <span className="text-sm">📌</span>}
+                  <p className="text-base font-bold text-primary truncate">{getChatProfile(chat, user, instructors).name}</p>
                 </div>
-                <p className="text-xs text-dim truncate mt-0.5">{chat.lastMessage || 'No messages yet'}</p>
+                <p className="text-sm text-dim truncate mt-0.5">{chat.lastMessage || 'No messages yet'}</p>
               </div>
-              <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                <span className="text-2xs text-dim">{fmtChatTime(chat.lastAt)}</span>
+              <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                <span className="text-xs text-dim">{fmtChatTime(chat.lastAt)}</span>
                 {(() => {
                   const lastReadTs = user ? (chat.lastRead?.[user.uid]?.seconds || 0) : 0
                   const msgs       = messages[chat.id] || []
                   const unread     = msgs.filter(m => m.authorId !== user?.uid && (m.createdAt?.seconds || 0) > lastReadTs).length
                   return unread > 0 ? (
-                    <span className="min-w-[18px] h-[18px] rounded-full bg-accent text-white text-[9px] font-bold flex items-center justify-center px-1">{unread > 9 ? '9+' : unread}</span>
+                    <span className="min-w-[22px] h-[22px] rounded-full bg-accent text-white text-[11px] font-bold flex items-center justify-center px-1.5">{unread > 9 ? '9+' : unread}</span>
                   ) : null
                 })()}
               </div>
@@ -310,7 +364,7 @@ export default function ChatView() {
             const { addDoc, collection, query, where, getDocs, serverTimestamp } = await import('firebase/firestore')
             const { db } = await import('../../utils/firebase')
             const myId = user?.uid
-            const q = query(collection(db, 'chats'), where('isGroup', '==', false))
+            const q = query(collection(db, 'chats'), where('isGroup', '==', false), where('members', 'array-contains', myId))
             const snap = await getDocs(q)
             const existing = snap.docs.find(d => {
               const m = d.data().members || []
@@ -341,29 +395,30 @@ export default function ChatView() {
     <div className="h-full flex flex-col bg-app">
 
       {/* Header with back button */}
-      <div className="flex items-center gap-3 px-4 py-3 bg-surface border-b border-app flex-shrink-0">
+      <div className="flex items-center gap-4 px-5 py-4 bg-surface border-b border-app flex-shrink-0">
         <button onClick={() => setShowList(true)}
-          className="text-accent text-lg cursor-pointer bg-transparent border-none leading-none">‹</button>
-        <div className="w-8 h-8 rounded-full bg-accent-soft flex items-center justify-center text-base">
-          {activeChat?.isGroup ? '👥' : '💬'}
-        </div>
+          className="text-accent text-2xl cursor-pointer bg-transparent border-none leading-none mr-1.5">‹</button>
+        {(() => {
+          const profile = getChatProfile(activeChat, user, instructors)
+          return <Avatar firstName={profile.firstName} lastName={profile.lastName} color={profile.color} photo={profile.photo} icon={profile.icon} size={40} />
+        })()}
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold text-primary truncate">{activeChat?.name}</p>
-          <p className="text-xs text-dim">{activeChat?.isGroup ? `${activeChat?.members?.length || 0} members` : 'Direct message'}</p>
+          <p className="text-base font-bold text-primary truncate leading-tight">{getChatProfile(activeChat, user, instructors).name}</p>
+          <p className="text-sm text-dim mt-0.5">{activeChat?.isGroup ? `${activeChat?.members?.length || 0} members` : 'Direct message'}</p>
         </div>
         {(activeChat?.createdBy === user?.uid || !activeChat?.createdBy) && (
           <button onClick={() => { if (window.confirm('Delete this chat?')) { deleteChat(activeChat?.id); setShowList(true) } }}
-            className="w-8 h-8 rounded-xl hover:bg-danger-soft border border-app flex items-center justify-center text-danger cursor-pointer bg-transparent"
+            className="w-10 h-10 rounded-xl hover:bg-danger-soft border border-app flex items-center justify-center text-danger cursor-pointer bg-transparent"
             title="Delete chat">🗑</button>
         )}
       </div>
 
       {/* Messages */}
-      <div ref={msgListRef} className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-3">
+      <div ref={msgListRef} className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4">
         {activeMsgs.length === 0 && (
           <div className="flex-1 flex flex-col items-center justify-center py-16 text-center">
             <p className="text-3xl mb-2">💬</p>
-            <p className="text-sm font-semibold text-muted">No messages yet — say hello!</p>
+            <p className="text-base font-semibold text-muted">No messages yet — say hello!</p>
           </div>
         )}
         {activeMsgs.map(msg => {
@@ -404,10 +459,10 @@ export default function ChatView() {
       )}
 
       {/* Input bar */}
-      <div className="px-3 py-2.5 bg-surface border-t border-app flex items-end gap-2 flex-shrink-0 safe-bottom">
+      <div className="px-4.5 py-3.5 bg-surface border-t border-app flex items-end gap-3 flex-shrink-0 safe-bottom">
         {/* Attach */}
         <button onClick={() => fileRef.current?.click()} disabled={uploading}
-          className="w-9 h-9 rounded-xl border border-app bg-raised flex items-center justify-center text-base cursor-pointer flex-shrink-0 disabled:opacity-50">
+          className="w-11 h-11 rounded-xl border border-app bg-raised flex items-center justify-center text-lg cursor-pointer flex-shrink-0 disabled:opacity-50">
           {uploading ? '⏳' : '📎'}
         </button>
         <input ref={fileRef} type="file" multiple accept="image/*,.pdf" className="hidden" onChange={handleFileUpload} />
@@ -415,7 +470,7 @@ export default function ChatView() {
         {/* Emoji */}
         <div className="relative flex-shrink-0">
           <button onClick={() => setInputEmoji(v => !v)}
-            className="w-9 h-9 rounded-xl border border-app bg-raised flex items-center justify-center text-base cursor-pointer">
+            className="w-11 h-11 rounded-xl border border-app bg-raised flex items-center justify-center text-lg cursor-pointer">
             😊
           </button>
           {inputEmoji && (
@@ -424,7 +479,7 @@ export default function ChatView() {
               <div className="absolute bottom-full mb-2 left-0 z-20 bg-card border border-app rounded-2xl p-2.5 flex flex-wrap gap-2 shadow-xl w-52">
                 {EMOJIS.map(e => (
                   <button key={e} onClick={() => { setMsgText(t => t + e); setInputEmoji(false); inputRef.current?.focus() }}
-                    className="text-xl cursor-pointer bg-transparent border-none p-1 rounded">{e}</button>
+                    className="text-xl cursor-pointer bg-transparent border-none p-1 rounded hover:bg-raised transition-colors">{e}</button>
                 ))}
               </div>
             </>
@@ -432,18 +487,18 @@ export default function ChatView() {
         </div>
 
         {/* Text */}
-        <div className="flex-1 bg-raised border border-app rounded-2xl px-3.5 py-2 flex items-end">
+        <div className="flex-1 bg-raised border border-app rounded-2xl px-4.5 py-2.5 flex items-end">
           <textarea ref={inputRef} value={msgText} onChange={e => setMsgText(e.target.value)}
             placeholder="Message…" rows={1}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
-            style={{ resize: 'none', maxHeight: 100, overflow: 'auto' }}
-            className="flex-1 bg-transparent text-sm text-primary placeholder:text-dim outline-none resize-none" />
+            style={{ resize: 'none', maxHeight: 120, overflow: 'auto' }}
+            className="flex-1 bg-transparent text-base text-primary placeholder:text-dim outline-none resize-none" />
         </div>
 
         {/* Send */}
         <button onClick={handleSend}
           disabled={(!msgText.trim() && !attachments.length) || sending}
-          className="w-9 h-9 rounded-xl bg-accent text-white flex items-center justify-center text-sm cursor-pointer border-none hover:opacity-90 disabled:opacity-40 flex-shrink-0">
+          className="w-11 h-11 rounded-xl bg-accent text-white flex items-center justify-center text-base cursor-pointer border-none hover:opacity-90 disabled:opacity-40 flex-shrink-0">
           {sending ? '…' : '➤'}
         </button>
       </div>
@@ -493,7 +548,7 @@ function DMPicker({ chats, onClose, onStartDM, currentUserId }) {
   )
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/50" onClick={onClose}>
+    <div className="absolute inset-0 z-50 flex flex-col justify-end bg-black/50" onClick={onClose}>
       <div className="bg-surface rounded-t-3xl overflow-hidden animate-slide-up max-h-[80vh] flex flex-col"
         onClick={e => e.stopPropagation()}>
         <div className="px-4 pt-3 pb-2 border-b border-app flex-shrink-0">
@@ -513,10 +568,7 @@ function DMPicker({ chats, onClose, onStartDM, currentUserId }) {
             <button key={u.id}
               onClick={() => onStartDM(u.id, `${u.firstName} ${u.lastName || ''}`.trim())}
               className="flex items-center gap-3 w-full px-4 py-3 text-left cursor-pointer bg-transparent border-none border-b border-app/20 hover:bg-raised">
-              <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
-                style={{ background: u.color || 'var(--accent)' }}>
-                {u.firstName?.[0]}{u.lastName?.[0]}
-              </div>
+              <Avatar firstName={u.firstName} lastName={u.lastName} color={u.color} photo={u.photo} size={40} />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-semibold text-primary">{u.firstName} {u.lastName}</p>

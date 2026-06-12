@@ -1,9 +1,10 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { doc, updateDoc }   from 'firebase/firestore'
 import { ref as stRef, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { updateEmail, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth'
 import { db, storage, auth } from '../../utils/firebase'
 import useAuthStore from '../../stores/useAuthStore'
+import { isBiometricsSupported, registerBiometrics, disableBiometrics, isBiometricsEnabled } from '../../utils/biometric'
 
 const INPUT = "w-full bg-raised border border-app rounded-xl px-4 py-3 text-sm text-primary placeholder:text-dim outline-none focus:border-accent transition-colors"
 
@@ -22,6 +23,82 @@ export default function ProfileView() {
   const [toast,     setToast]     = useState(null)
 
   const fileRef = useRef(null)
+
+  const [bioSupported, setBioSupported] = useState(false)
+  const [bioEnabled, setBioEnabled] = useState(false)
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [bioError, setBioError] = useState('')
+
+  useEffect(() => {
+    async function checkBio() {
+      const supported = await isBiometricsSupported()
+      setBioSupported(supported)
+      setBioEnabled(isBiometricsEnabled())
+    }
+    checkBio()
+  }, [])
+
+  const handleDisableBio = () => {
+    disableBiometrics()
+    setBioEnabled(false)
+    setConfirmPassword('')
+    setBioError('')
+    showToast('Biometrics disabled!')
+  }
+
+  const handleEnableBio = async () => {
+    setBioError('')
+    try {
+      const email = useAuthStore.getState().user?.email
+      if (!email) throw new Error('You must be signed in to configure biometrics')
+      await registerBiometrics(email, confirmPassword)
+      setBioEnabled(true)
+      setConfirmPassword('')
+      showToast('Biometrics registered successfully!')
+    } catch (err) {
+      console.warn(err)
+      setBioError(err.message || 'Verification or sensor prompt failed.')
+    }
+  }
+
+  const [unavailability, setUnavailability] = useState(userProfile?.unavailability || [])
+  const [addDay, setAddDay] = useState('Mon')
+  const [addStart, setAddStart] = useState('09:00')
+  const [addEnd, setAddEnd] = useState('17:00')
+  const [savingAvail, setSavingAvail] = useState(false)
+
+  const handleAddSlot = () => {
+    if (!addStart || !addEnd) { showToast('Please select start and end times', false); return }
+    if (addStart >= addEnd) { showToast('End time must be after start time', false); return }
+    
+    // Check duplicate
+    const duplicate = unavailability.some(s => s.day === addDay && s.start === addStart && s.end === addEnd)
+    if (duplicate) { showToast('This slot has already been added', false); return }
+
+    setUnavailability(prev => [...prev, { day: addDay, start: addStart, end: addEnd }].sort((a,b) => {
+      const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+      if (a.day !== b.day) return days.indexOf(a.day) - days.indexOf(b.day)
+      return a.start.localeCompare(b.start)
+    }))
+    showToast('Slot added locally! Tap "Save settings" below.')
+  }
+
+  const handleRemoveSlot = (idx) => {
+    setUnavailability(prev => prev.filter((_, i) => i !== idx))
+    showToast('Slot removed locally! Tap "Save settings" below.')
+  }
+
+  const handleSaveAvailability = async () => {
+    setSavingAvail(true)
+    try {
+      await updateDoc(doc(db, 'users', user.uid), { unavailability })
+      showToast('Availability settings saved!')
+    } catch (e) {
+      showToast('Failed to save availability', false)
+    } finally {
+      setSavingAvail(false)
+    }
+  }
 
   const showToast = (msg, ok = true) => {
     setToast({ msg, ok })
@@ -133,6 +210,153 @@ export default function ProfileView() {
             className="w-full py-3 rounded-xl bg-accent text-white text-sm font-bold cursor-pointer border-none disabled:opacity-50">
             {saving ? 'Saving…' : 'Save changes'}
           </button>
+        </div>
+
+        {/* Availability Settings */}
+        <div className="bg-card border border-app rounded-2xl p-4 flex flex-col gap-4">
+          <p className="text-xs font-bold text-muted uppercase tracking-wide">Weekly Availability Settings</p>
+          <p className="text-xs text-muted leading-relaxed">
+            Mark recurring times when you are <strong>UNAVAILABLE</strong> to teach. Administrators will see conflicts highlighted on the roster calendar.
+          </p>
+
+          {/* Current Slots List */}
+          {unavailability.length > 0 ? (
+            <div className="flex flex-col gap-2">
+              {unavailability.map((slot, idx) => {
+                const formatTime = (timeStr) => {
+                  const [h, m] = timeStr.split(':').map(Number)
+                  const ampm = h >= 12 ? 'PM' : 'AM'
+                  return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${ampm}`
+                }
+                return (
+                  <div key={idx} className="flex items-center justify-between bg-raised border border-app px-4 py-3 rounded-xl">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded text-2xs font-bold bg-accent/25 text-accent">{slot.day}</span>
+                      <span className="text-xs font-semibold text-primary">{formatTime(slot.start)} – {formatTime(slot.end)}</span>
+                    </div>
+                    <button onClick={() => handleRemoveSlot(idx)}
+                      className="w-7 h-7 rounded-lg bg-red-500/10 hover:bg-red-500/25 border-none flex items-center justify-center cursor-pointer text-red-400 transition-colors">
+                      🗑
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <p className="text-xs text-dim text-center py-4 bg-raised rounded-xl border border-app border-dashed">
+              You are fully available! No unavailability slots added.
+            </p>
+          )}
+
+          {/* Add Form */}
+          <div className="border-t border-app pt-4 flex flex-col gap-3">
+            <p className="text-xs font-bold text-muted uppercase tracking-wide">Add Unavailability Slot</p>
+            <div className="flex gap-2">
+              <div className="flex-1 flex flex-col">
+                <label className="block text-2xs font-semibold text-dim mb-1">Day</label>
+                <select value={addDay} onChange={e => setAddDay(e.target.value)}
+                  className="w-full bg-raised border border-app rounded-xl px-2.5 py-2.5 text-xs text-primary outline-none focus:border-accent">
+                  <option value="Mon">Monday</option>
+                  <option value="Tue">Tuesday</option>
+                  <option value="Wed">Wednesday</option>
+                  <option value="Thu">Thursday</option>
+                  <option value="Fri">Friday</option>
+                  <option value="Sat">Saturday</option>
+                  <option value="Sun">Sunday</option>
+                </select>
+              </div>
+              <div className="flex-1 flex flex-col">
+                <label className="block text-2xs font-semibold text-dim mb-1">Start Time</label>
+                <input type="time" value={addStart} onChange={e => setAddStart(e.target.value)}
+                  className="w-full bg-raised border border-app rounded-xl px-2.5 py-2 text-xs text-primary outline-none focus:border-accent" />
+              </div>
+              <div className="flex-1 flex flex-col">
+                <label className="block text-2xs font-semibold text-dim mb-1">End Time</label>
+                <input type="time" value={addEnd} onChange={e => setAddEnd(e.target.value)}
+                  className="w-full bg-raised border border-app rounded-xl px-2.5 py-2 text-xs text-primary outline-none focus:border-accent" />
+              </div>
+            </div>
+            <button onClick={handleAddSlot}
+              className="w-full py-2.5 rounded-xl bg-raised border border-app text-xs font-bold text-primary hover:text-accent hover:border-accent transition-colors cursor-pointer">
+              + Add Slot locally
+            </button>
+          </div>
+
+          <button onClick={handleSaveAvailability} disabled={savingAvail}
+            className="w-full py-3 rounded-xl bg-accent text-white text-sm font-bold cursor-pointer border-none disabled:opacity-50 mt-2">
+            {savingAvail ? 'Saving settings…' : 'Save availability settings'}
+          </button>
+        </div>
+
+        {/* Calendar Subscription Feed (iCal) */}
+        <div className="bg-card border border-app rounded-2xl p-4 flex flex-col gap-4">
+          <p className="text-xs font-bold text-muted uppercase tracking-wide">Calendar Subscription Feed (iCal)</p>
+          <p className="text-xs text-muted leading-relaxed">
+            Subscribe to your confirmed ShiftHub schedule inside your phone's native calendar client (Apple Calendar, Google Calendar, Outlook, etc.). Your calendar will sync automatically in the background.
+          </p>
+          <div className="bg-raised border border-app rounded-xl p-3.5 flex flex-col gap-2">
+            <span className="text-[10px] font-bold text-muted uppercase tracking-wider">Subscription Link</span>
+            <code className="text-xs text-accent break-all font-mono">
+              {`${window.location.origin}/calendar/${user?.uid}.ics`}
+            </code>
+          </div>
+          <button
+            onClick={() => {
+              const url = `${window.location.origin}/calendar/${user?.uid}.ics`
+              navigator.clipboard.writeText(url)
+                .then(() => showToast('Subscription link copied!'))
+                .catch(() => showToast('Failed to copy', false))
+            }}
+            className="w-full py-3 rounded-xl bg-raised border border-app text-sm font-bold text-primary hover:text-accent hover:border-accent transition-colors cursor-pointer"
+          >
+            📋 Copy Subscription Link
+          </button>
+        </div>
+
+        {/* Biometric Quick Login */}
+        <div className="bg-card border border-app rounded-2xl p-4 flex flex-col gap-4">
+          <p className="text-xs font-bold text-muted uppercase tracking-wide">Biometric Quick Login</p>
+          <p className="text-xs text-muted leading-relaxed">
+            Use device biometrics (Face ID / Touch ID / fingerprint) for instant sign-in on this browser.
+          </p>
+          {!bioSupported ? (
+            <div className="text-xs text-muted leading-relaxed">
+              ⚠️ Biometric quick login is not supported by this device or browser.
+            </div>
+          ) : bioEnabled ? (
+            <div className="flex items-center justify-between bg-raised border border-app px-4 py-3 rounded-xl">
+              <div>
+                <p className="text-xs text-ok font-semibold">🧬 Biometrics active on this device</p>
+                <p className="text-[10px] text-dim">You will be logged in automatically using Face ID / fingerprint.</p>
+              </div>
+              <button onClick={handleDisableBio}
+                className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-xs font-bold rounded-lg cursor-pointer border-none transition-colors">
+                Disable
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <p className="text-xs text-muted leading-relaxed">
+                To enable quick login, please confirm your current login password. This is securely saved in your local sandbox to perform background Firebase authentication.
+              </p>
+              {bioError && (
+                <p className="text-xs text-danger font-semibold">⚠️ {bioError}</p>
+              )}
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm your password"
+                  className={`${INPUT} flex-1`}
+                />
+                <button onClick={handleEnableBio} disabled={!confirmPassword}
+                  className="px-4 py-2.5 bg-accent hover:opacity-90 disabled:opacity-50 text-white text-xs font-bold rounded-xl cursor-pointer border-none">
+                  Enable
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Email */}

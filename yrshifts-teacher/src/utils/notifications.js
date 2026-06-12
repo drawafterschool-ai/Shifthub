@@ -41,7 +41,7 @@ export const NOTIF_COLORS = {
 
 export const notifMessage = (n) => {
   switch (n.type) {
-    case 'shift_assigned':  return `You have a new shift on ${n.shiftDate} at ${n.shiftStart}`
+    case 'shift_assigned':  return n.message || `You have a new shift on ${n.shiftDate} at ${n.shiftStart}`
     case 'shift_confirmed': return `${n.actorName} confirmed their shift on ${n.shiftDate}`
     case 'shift_rejected':  return `${n.actorName} rejected their shift on ${n.shiftDate} — needs reassignment`
     case 'shift_claimed':   return `${n.actorName} claimed the open shift on ${n.shiftDate}`

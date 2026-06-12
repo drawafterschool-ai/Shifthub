@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import useScheduleStore from '../stores/useScheduleStore'
+import useDirectoryStore from '../stores/useDirectoryStore'
+import { timeTo24 } from '../utils/time'
 
 // Convert hex to rgba
 function hexToRgba(hex, alpha) {
@@ -35,6 +37,55 @@ export default function ShiftChip({
   const job      = jobs?.find(j => j.id === shift.job)
   const isClaim  = shift.claimable && isUnassigned
   const dotColor = STATUS_DOT[shift.confirmationStatus]
+
+  const { instructors } = useDirectoryStore()
+  const instructor = instructors?.find(i => i.id === shift.instructorId)
+  const hasConflict = (() => {
+    if (!instructor || !instructor.unavailability || !instructor.unavailability.length || !shift.date) return false
+    
+    const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    const d = new Date(shift.date + 'T12:00:00')
+    const dayAbbrev = daysOfWeek[d.getDay()]
+
+    const shiftStart = timeTo24(shift.start)
+    let shiftEnd = timeTo24(shift.end)
+    if (shiftEnd <= shiftStart) shiftEnd += 1440
+
+    for (const slot of instructor.unavailability) {
+      if (slot.day === dayAbbrev) {
+        const [sh, sm] = slot.start.split(':').map(Number)
+        const [eh, em] = slot.end.split(':').map(Number)
+        const slotStart = sh * 60 + sm
+        let slotEnd = eh * 60 + em
+        if (slotEnd <= slotStart) slotEnd += 1440
+
+        if (shiftStart < slotEnd && slotStart < shiftEnd) {
+          return true
+        }
+      }
+    }
+    return false
+  })()
+
+  const hasOverlap = (() => {
+    if (!instructor || !shift.date) return false
+    const siblings = useScheduleStore.getState().rawShifts.filter(
+      s => s.instructorId === instructor.id && s.date === shift.date && s.id !== shift.id && s.status !== 'cancelled'
+    )
+    const shiftStart = timeTo24(shift.start)
+    let shiftEnd = timeTo24(shift.end)
+    if (shiftEnd <= shiftStart) shiftEnd += 1440
+    
+    for (const s of siblings) {
+      const sStart = timeTo24(s.start)
+      let sEnd = timeTo24(s.end)
+      if (sEnd <= sStart) sEnd += 1440
+      if (shiftStart < sEnd && sStart < shiftEnd) {
+        return true
+      }
+    }
+    return false
+  })()
 
   // Color logic:
   // - Open/claimable chip  → danger/pulse (no tint)
@@ -179,6 +230,10 @@ export default function ShiftChip({
         {seriesLabel && <p className="text-2xs text-dim font-mono truncate">{seriesLabel}</p>}
       </div>
       {isClaim && <p className="text-2xs font-extrabold text-danger mt-0.5 uppercase tracking-wide">⚡ Open</p>}
+      <div className="flex flex-wrap items-center gap-1 mt-0.5">
+        {hasConflict && <p className="text-2xs font-extrabold text-danger mt-0.5 flex items-center gap-1 uppercase tracking-wide">⚠️ Unavail</p>}
+        {hasOverlap && <p className="text-2xs font-extrabold text-danger mt-0.5 flex items-center gap-1 uppercase tracking-wide">⚠️ Overlap</p>}
+      </div>
     </div>
   )
 }

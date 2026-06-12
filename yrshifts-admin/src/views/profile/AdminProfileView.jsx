@@ -58,6 +58,58 @@ export default function AdminProfileView() {
     } finally { setSaving(false) }
   }
 
+  const [pushStatus, setPushStatus] = useState(() => {
+    if (typeof Notification !== 'undefined' && Notification.permission === 'denied') return 'denied'
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && userProfile?.fcmToken) return 'done'
+    return 'idle'
+  })
+  const [pushError, setPushError] = useState('')
+
+  const handleEnablePush = async () => {
+    if (typeof Notification === 'undefined' || !('serviceWorker' in navigator)) {
+      setPushStatus('unsupported')
+      return
+    }
+    setPushStatus('loading')
+    try {
+      const permission = await Notification.requestPermission()
+      if (permission !== 'granted') {
+        setPushStatus('denied')
+        return
+      }
+      const { getToken } = await import('firebase/messaging')
+      const { messaging } = await import('../../utils/firebase')
+      if (!messaging) {
+        setPushStatus('unsupported')
+        return
+      }
+      
+      // Wait until the unified admin sw.js is fully active and ready
+      const reg = await navigator.serviceWorker.ready
+      
+      const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY
+      if (!vapidKey) {
+        setPushStatus('error')
+        setPushError('Missing VAPID key configuration.')
+        return
+      }
+      const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: reg })
+      if (!token) {
+        setPushStatus('error')
+        setPushError('FCM returned no token.')
+        return
+      }
+      await updateDoc(doc(db, 'users', user.uid), { fcmToken: token })
+      setPushStatus('done')
+      showToast('Notifications active!')
+    } catch (e) {
+      console.error(e)
+      setPushStatus('error')
+      setPushError(e.message || 'An unknown error occurred')
+      showToast('Failed to enable', false)
+    }
+  }
+
   return (
     <div className="h-full overflow-y-auto bg-app">
       <div className="px-4 py-6 flex flex-col gap-5 max-w-lg mx-auto">
@@ -83,7 +135,7 @@ export default function AdminProfileView() {
             <p className="text-xs text-dim">{user?.email}</p>
           </div>
         </div>
-
+ 
         <div className="bg-card border border-app rounded-2xl p-4 flex flex-col gap-4">
           <p className="text-xs font-bold text-muted uppercase tracking-wide">Name</p>
           <div className="flex gap-3">
@@ -101,7 +153,7 @@ export default function AdminProfileView() {
             {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
-
+ 
         <div className="bg-card border border-app rounded-2xl p-4 flex flex-col gap-4">
           <p className="text-xs font-bold text-muted uppercase tracking-wide">Change password</p>
           <div>
@@ -116,6 +168,51 @@ export default function AdminProfileView() {
             className="w-full py-3 rounded-xl bg-raised border border-app text-sm font-bold text-primary cursor-pointer disabled:opacity-50">
             Update password
           </button>
+        </div>
+
+        <div className="bg-card border border-app rounded-2xl p-4 flex flex-col gap-4">
+          <p className="text-xs font-bold text-muted uppercase tracking-wide">🔔 Push Notifications Settings</p>
+          <p className="text-xs text-dim leading-relaxed">
+            Enable push notifications on your phone or computer to receive instant native alerts when teachers confirm or reject shifts, send new chat messages, or submit forms.
+          </p>
+          
+          {pushStatus === 'done' && (
+            <div className="flex items-center gap-2 bg-ok-soft border border-ok/30 rounded-xl px-3.5 py-2">
+              <span className="text-sm">✅</span>
+              <span className="text-xs text-ok font-semibold">Push notifications active on this device</span>
+            </div>
+          )}
+
+          {pushStatus === 'denied' && (
+            <div className="flex items-center gap-2 bg-raised border border-app rounded-xl px-3.5 py-2">
+              <span className="text-sm">🔕</span>
+              <span className="text-xs text-muted">Notifications blocked. Enable in your browser/device settings.</span>
+            </div>
+          )}
+
+          {pushStatus === 'unsupported' && (
+            <div className="flex items-center gap-2 bg-raised border border-app rounded-xl px-3.5 py-2">
+              <span className="text-sm">ℹ️</span>
+              <span className="text-xs text-muted">Push alerts are not supported in this browser.</span>
+            </div>
+          )}
+
+          {pushStatus === 'error' && (
+            <div className="flex items-center gap-2 bg-raised border border-danger/30 rounded-xl px-3.5 py-2">
+              <span className="text-sm">⚠️</span>
+              <span className="text-xs text-danger font-semibold truncate" title={pushError}>Failed: {pushError}</span>
+            </div>
+          )}
+
+          {['idle', 'loading'].includes(pushStatus) && (
+            <button
+              onClick={handleEnablePush}
+              disabled={pushStatus === 'loading'}
+              className="w-full py-3 rounded-xl bg-accent text-white text-sm font-bold cursor-pointer border-none disabled:opacity-60"
+            >
+              {pushStatus === 'loading' ? 'Enabling push alerts…' : '🔔 Enable Push Notifications'}
+            </button>
+          )}
         </div>
 
         <button onClick={signOut}

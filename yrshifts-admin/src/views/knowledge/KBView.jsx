@@ -26,6 +26,7 @@ function AddNodeModal({ parentId, onClose, onCreate }) {
   const [url,   setUrl]   = useState('')
   const [file,  setFile]  = useState(null)
   const [busy,  setBusy]  = useState(false)
+  const [error, setError] = useState(null)
   const fileRef = useRef(null)
 
   const INPUT = "w-full bg-raised border border-app rounded-lg px-3 py-2.5 text-sm text-primary placeholder:text-dim outline-none focus:border-accent transition-colors"
@@ -40,6 +41,7 @@ function AddNodeModal({ parentId, onClose, onCreate }) {
     const finalName = name.trim() || (file ? file.name.replace(/\.[^.]+$/, '') : '')
     if (!finalName) return
     setBusy(true)
+    setError(null)
     try {
       let node = { name: finalName, type: kind, parentId: parentId || null, order: Date.now(), createdAt: serverTimestamp() }
       if (kind === 'link') node.url = url.trim()
@@ -51,6 +53,9 @@ function AddNodeModal({ parentId, onClose, onCreate }) {
       }
       await onCreate(node)
       onClose()
+    } catch (err) {
+      console.error("Error creating KB node:", err)
+      setError(err.message || String(err))
     } finally { setBusy(false) }
   }
 
@@ -65,9 +70,9 @@ function AddNodeModal({ parentId, onClose, onCreate }) {
       <ModalHeader title="Add item" onClose={onClose} />
       <div className="flex rounded-xl border border-app overflow-hidden mb-4">
         {[['folder','📁 Folder'],['file','📄 File'],['link','🔗 Link']].map(([k,label]) => (
-          <button key={k} onClick={() => { setKind(k); setName(''); setFile(null) }}
+          <button key={k} onClick={() => { setKind(k); setName(''); setFile(null); setError(null) }}
             className={`flex-1 py-2 text-sm font-semibold cursor-pointer border-none transition-colors
-              ${kind===k ? 'bg-accent text-white' : 'bg-transparent text-muted hover:text-primary'}`}>{label}</button>
+               ${kind===k ? 'bg-accent text-white' : 'bg-transparent text-muted hover:text-primary'}`}>{label}</button>
         ))}
       </div>
       <div className="flex flex-col gap-3">
@@ -100,6 +105,11 @@ function AddNodeModal({ parentId, onClose, onCreate }) {
               </div>
             )}
           </div>
+        )}
+        {error && (
+          <p className="text-xs text-danger font-semibold mt-1">
+            ❌ {error}
+          </p>
         )}
       </div>
       <ModalFooter>

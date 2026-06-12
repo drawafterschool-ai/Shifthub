@@ -28,7 +28,7 @@ function ShiftDetailModal({ shift, onClose, actions }) {
   const status = STATUS_LABEL[shift.confirmationStatus]
 
   return (
-    <div className="fixed inset-0 z-[999] flex flex-col justify-end bg-black/60"
+    <div className="absolute inset-0 z-[999] flex flex-col justify-end bg-black/60"
       onClick={onClose}>
       <div className="bg-surface rounded-t-2xl animate-slide-up max-h-[85vh] flex flex-col"
         onClick={e => e.stopPropagation()}>
@@ -96,11 +96,11 @@ function ShiftDetailModal({ shift, onClose, actions }) {
         {actions && (
           <div className="px-4 py-3 border-t border-app flex-shrink-0"
             onClick={e => e.stopPropagation()}
-            style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom, 12px))' }}>
+            style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 28px)' }}>
             {actions}
           </div>
         )}
-        {!actions && <div style={{ height: 'max(8px, env(safe-area-inset-bottom, 8px))' }} />}
+        {!actions && <div style={{ height: 'calc(env(safe-area-inset-bottom, 0px) + 16px)' }} />}
       </div>
     </div>
   )

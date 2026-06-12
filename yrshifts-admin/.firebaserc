@@ -1,5 +1,6 @@
 {
   "projects": {
-    "default": "yrshifts"
+    "default": "yrshifts",
+    "trial": "yrshifts-test"
   }
 }

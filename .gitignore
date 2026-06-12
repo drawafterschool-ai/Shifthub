@@ -1,0 +1,23 @@
+# Ignore local environment files
+.env
+.env.local
+.env.*.local
+
+# Ignore build directories
+dist/
+build/
+yrshifts-deploy/dist/
+
+# Ignore node_modules
+node_modules/
+
+# Ignore backup files
+*.bak
+*.old
+
+# Ignore workspace files
+*.code-workspace
+
+# Ignore OS files
+.DS_Store
+Thumbs.db

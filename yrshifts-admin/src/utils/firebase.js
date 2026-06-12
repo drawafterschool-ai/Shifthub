@@ -1,5 +1,5 @@
 import { initializeApp }  from 'firebase/app'
-import { getFirestore }   from 'firebase/firestore'
+import { initializeFirestore } from 'firebase/firestore'
 import { getStorage }     from 'firebase/storage'
 import { getAuth }        from 'firebase/auth'
 import { getMessaging }   from 'firebase/messaging'
@@ -14,7 +14,9 @@ const app = initializeApp({
   appId:             import.meta.env.VITE_FIREBASE_APP_ID,
 })
 
-export const db      = getFirestore(app)
+export const db      = initializeFirestore(app, {
+  experimentalAutoDetectLongPolling: true,
+})
 
 // Offline persistence — app loads from cache even without internet
 // Offline persistence disabled (deprecated API removed)

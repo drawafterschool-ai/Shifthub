@@ -18,11 +18,12 @@ const TABS = [
   { id: 'pending', label: 'Pending ⚠️' },
 ]
 
-const PENDING_TYPES = ['shift_rejected', 'shift_claimed']
+const PENDING_TYPES = ['shift_rejected', 'shift_claimed', 'shift_unconfirmed']
 
 function fmtTime(ts) {
   if (!ts) return ''
   const d    = ts.seconds ? new Date(ts.seconds * 1000) : new Date(ts)
+  if (isNaN(d.getTime())) return ''
   const diff = Date.now() - d
   if (diff < 60000)    return 'Just now'
   if (diff < 3600000)  return `${Math.floor(diff / 60000)}m ago`
@@ -37,11 +38,11 @@ function NotifRow({ notif, onMarkRead, onNavigate, onIgnore }) {
   const color    = NOTIF_COLORS[notif.type] || 'text-muted'
 
   const actionBtn = () => {
-    if (notif.type === 'shift_rejected' || notif.type === 'shift_claimed') {
+    if (notif.type === 'shift_rejected' || notif.type === 'shift_claimed' || notif.type === 'shift_unconfirmed') {
       return (
         <div className="flex gap-1.5">
           <Button small variant="primary" onClick={e => { e.stopPropagation(); onNavigate('schedule') }}>
-            Reassign
+            {notif.type === 'shift_unconfirmed' ? 'Follow Up' : 'Reassign'}
           </Button>
           <Button small variant="ghost" onClick={e => { e.stopPropagation(); onIgnore(notif.id) }}>
             Ignore
@@ -70,7 +71,7 @@ function NotifRow({ notif, onMarkRead, onNavigate, onIgnore }) {
         </Button>
       )
     }
-    if (notif.type === 'instructor_joined') {
+    if (notif.type === 'instructor_joined' || notif.type === 'first_login') {
       return (
         <Button small variant="ghost" onClick={e => { e.stopPropagation(); onNavigate('directory') }}>
           View profile
@@ -166,6 +167,32 @@ export default function NotificationsView() {
     }
   }, [notifications, activeTab])
 
+  const groupedNotifications = useMemo(() => {
+    const groups = { today: [], yesterday: [], earlier: [] }
+    const todayStr = new Date().toDateString()
+    const yesterday = new Date()
+    yesterday.setDate(yesterday.getDate() - 1)
+    const yesterdayStr = yesterday.toDateString()
+
+    filtered.forEach(n => {
+      const dVal = n.createdAt?.seconds ? n.createdAt.seconds * 1000 : n.createdAt
+      if (!dVal) {
+        groups.earlier.push(n)
+        return
+      }
+      const d = new Date(dVal)
+      const dStr = d.toDateString()
+      if (dStr === todayStr) {
+        groups.today.push(n)
+      } else if (dStr === yesterdayStr) {
+        groups.yesterday.push(n)
+      } else {
+        groups.earlier.push(n)
+      }
+    })
+    return groups
+  }, [filtered])
+
   // Tab badge counts
   const tabBadge = (id) => {
     const unread = (list) => list.filter(n => n.status === 'unread').length
@@ -248,20 +275,63 @@ export default function NotificationsView() {
             </p>
             <p className="text-xs text-dim">
               {activeTab === 'pending'
-                ? 'Rejections and claims will appear here'
+                ? 'Rejections, claims, and unconfirmed shifts will appear here'
                 : 'New activity will appear here in real time'}
             </p>
           </div>
         ) : (
-          filtered.map(notif => (
-            <NotifRow
-              key={notif.id}
-              notif={notif}
-              onMarkRead={markRead}
-              onNavigate={(path) => navigate(`/${path}`)}
-              onIgnore={ignoreNotif}
-            />
-          ))
+          <div className="flex flex-col">
+            {groupedNotifications.today.length > 0 && (
+              <div>
+                <div className="px-5 py-2.5 bg-surface border-b border-app/20 text-xs font-bold text-accent tracking-wider uppercase">
+                  Today
+                </div>
+                {groupedNotifications.today.map(notif => (
+                  <NotifRow
+                    key={notif.id}
+                    notif={notif}
+                    onMarkRead={markRead}
+                    onNavigate={(path) => navigate(`/${path}`)}
+                    onIgnore={ignoreNotif}
+                  />
+                ))}
+              </div>
+            )}
+
+            {groupedNotifications.yesterday.length > 0 && (
+              <div>
+                <div className="px-5 py-2.5 bg-surface border-b border-app/20 text-xs font-bold text-muted tracking-wider uppercase mt-4 first:mt-0">
+                  Yesterday
+                </div>
+                {groupedNotifications.yesterday.map(notif => (
+                  <NotifRow
+                    key={notif.id}
+                    notif={notif}
+                    onMarkRead={markRead}
+                    onNavigate={(path) => navigate(`/${path}`)}
+                    onIgnore={ignoreNotif}
+                  />
+                ))}
+              </div>
+            )}
+
+            {groupedNotifications.earlier.length > 0 && (
+              <div>
+                <div className="px-5 py-2.5 bg-surface border-b border-app/20 text-xs font-bold text-dim tracking-wider uppercase mt-4 first:mt-0">
+                  Earlier
+                </div>
+                {groupedNotifications.earlier.map(notif => (
+                  <NotifRow
+                    key={notif.id}
+                    notif={notif}
+                    onMarkRead={markRead}
+                    onNavigate={(path) => navigate(`/${path}`)}
+                    onIgnore={ignoreNotif}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>

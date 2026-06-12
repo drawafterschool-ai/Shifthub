@@ -8,16 +8,28 @@ const useDirectoryStore = create((set, get) => ({
   _unsub:      null,
 
   init() {
+    try {
+      const cached = localStorage.getItem('shifthub_instructors')
+      if (cached) {
+        set({ instructors: JSON.parse(cached), loading: false })
+      }
+    } catch (e) {
+      console.warn('Error loading cached instructors:', e)
+    }
+
     const unsub = onSnapshot(collection(db, 'users'), (snap) => {
-      set({
-        instructors: snap.docs.map(d => ({ id: d.id, ...d.data() }))
-                              .sort((a, b) => {
-                                const nameA = `${a.firstName} ${a.lastName}`.toLowerCase()
-                                const nameB = `${b.firstName} ${b.lastName}`.toLowerCase()
-                                return nameA.localeCompare(nameB)
-                              }),
-        loading: false,
-      })
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+                            .sort((a, b) => {
+                              const nameA = `${a.firstName} ${a.lastName}`.toLowerCase()
+                              const nameB = `${b.firstName} ${b.lastName}`.toLowerCase()
+                              return nameA.localeCompare(nameB)
+                            })
+      set({ instructors: list, loading: false })
+      try {
+        localStorage.setItem('shifthub_instructors', JSON.stringify(list))
+      } catch (e) {
+        console.warn('Error saving instructors to cache:', e)
+      }
     })
     set({ _unsub: unsub })
   },

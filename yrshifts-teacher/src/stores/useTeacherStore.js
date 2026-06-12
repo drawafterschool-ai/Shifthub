@@ -18,28 +18,79 @@ const useTeacherStore = create((set, get) => ({
 
   init(userId) {
     set({ _userId: userId })
+    // Load from cache if exists
+    try {
+      const cachedMyShifts = localStorage.getItem(`shifthub_myShifts_${userId}`)
+      const cachedOpenShifts = localStorage.getItem(`shifthub_openShifts_${userId}`)
+      const cachedNotifications = localStorage.getItem(`shifthub_notifications_${userId}`)
+      const cachedBuzz = localStorage.getItem(`shifthub_buzzPosts_${userId}`)
+
+      const updateObj = {}
+      if (cachedMyShifts) {
+        updateObj.myShifts = JSON.parse(cachedMyShifts)
+        updateObj.loading = false
+      }
+      if (cachedOpenShifts) {
+        updateObj.openShifts = JSON.parse(cachedOpenShifts)
+      }
+      if (cachedNotifications) {
+        updateObj.notifications = JSON.parse(cachedNotifications)
+      }
+      if (cachedBuzz) {
+        updateObj.buzzPosts = JSON.parse(cachedBuzz)
+      }
+      if (Object.keys(updateObj).length > 0) {
+        set(updateObj)
+      }
+    } catch (e) {
+      console.warn('Error loading cached teacher store:', e)
+    }
+
     // My assigned shifts
     const q1 = query(collection(db, 'shifts'), where('instructorId', '==', userId))
     const u1 = onSnapshot(q1, snap => {
-      set({ myShifts: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => a.date.localeCompare(b.date)) })
-      set({ loading: false })
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => a.date.localeCompare(b.date))
+      set({ myShifts: list, loading: false })
+      try {
+        localStorage.setItem(`shifthub_myShifts_${userId}`, JSON.stringify(list))
+      } catch (e) {
+        console.warn('Error saving myShifts to cache:', e)
+      }
     })
 
     // Open / claimable shifts
     const q2 = query(collection(db, 'shifts'), where('claimable', '==', true))
     const u2  = onSnapshot(q2, snap => {
-      set({ openShifts: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => a.date.localeCompare(b.date)) })
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => a.date.localeCompare(b.date))
+      set({ openShifts: list })
+      try {
+        localStorage.setItem(`shifthub_openShifts_${userId}`, JSON.stringify(list))
+      } catch (e) {
+        console.warn('Error saving openShifts to cache:', e)
+      }
     })
 
     // My notifications
     const q3 = query(collection(db, 'notifications'), where('recipientId', '==', userId))
     const u3  = onSnapshot(q3, snap => {
-      set({ notifications: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => b.createdAt - a.createdAt) })
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => b.createdAt - a.createdAt)
+      set({ notifications: list })
+      try {
+        localStorage.setItem(`shifthub_notifications_${userId}`, JSON.stringify(list))
+      } catch (e) {
+        console.warn('Error saving notifications to cache:', e)
+      }
     })
 
     // Weekly buzz
     const u4 = onSnapshot(collection(db, 'weekly_buzz'), snap => {
-      set({ buzzPosts: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0)) })
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0))
+      set({ buzzPosts: list })
+      try {
+        localStorage.setItem(`shifthub_buzzPosts_${userId}`, JSON.stringify(list))
+      } catch (e) {
+        console.warn('Error saving buzzPosts to cache:', e)
+      }
     })
 
     set(s => ({ _unsubs: [...s._unsubs, u1, u2, u3, u4] }))
@@ -53,16 +104,6 @@ const useTeacherStore = create((set, get) => ({
   // Confirm a shift
   async confirmShift(shift, userId, userName) {
     await updateDoc(doc(db, 'shifts', shift.id), { confirmationStatus: 'confirmed' })
-    await createNotification({
-      type:        'shift_confirmed',
-      forAdmin:    true,
-      recipientId: 'admin',
-      actorName:   userName,
-      shiftId:     shift.id,
-      shiftDate:   shift.date,
-      shiftStart:  shift.start,
-      shiftTitle:  shift.title || 'Shift',
-    })
   },
 
   // Reject a shift — keeps instructorId so admin sees red dot on correct row,
@@ -71,16 +112,6 @@ const useTeacherStore = create((set, get) => ({
     await updateDoc(doc(db, 'shifts', shift.id), {
       confirmationStatus: 'rejected',
       // intentionally keep instructorId so admin can see who rejected it
-    })
-    await createNotification({
-      type:        'shift_rejected',
-      forAdmin:    true,
-      recipientId: 'admin',
-      actorName:   userName,
-      shiftId:     shift.id,
-      shiftDate:   shift.date,
-      shiftStart:  shift.start,
-      shiftTitle:  shift.title || 'Shift',
     })
   },
 
@@ -128,16 +159,6 @@ const useTeacherStore = create((set, get) => ({
       instructorId:       userId,
       claimable:          false,
       confirmationStatus: 'confirmed',
-    })
-    await createNotification({
-      type:        'shift_claimed',
-      forAdmin:    true,
-      recipientId: 'admin',
-      actorName:   userName,
-      shiftId:     shift.id,
-      shiftDate:   shift.date,
-      shiftStart:  shift.start,
-      shiftTitle:  shift.title || 'Shift',
     })
   },
 

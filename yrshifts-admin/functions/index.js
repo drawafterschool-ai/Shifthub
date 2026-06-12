@@ -59,15 +59,21 @@ function emailHtml(subject, body) {
 // ─────────────────────────────────────────────────────────────────────────────
 // SHARED DELIVERY — email + FCM push + SMS
 // ─────────────────────────────────────────────────────────────────────────────
-async function deliver(user, subject, body) {
+async function deliver(user, subject, body, customLink) {
   const results = { push: false, email: false, sms: false }
 
   // FCM push
   if (user.fcmToken) {
     try {
+      const defaultLink = ['owner', 'admin', 'manager'].includes(user.role)
+        ? 'https://yrshifts.web.app/admin'
+        : 'https://yrshifts.web.app/app'
+      const link = customLink || defaultLink
+
       await admin.messaging().send({
         token: user.fcmToken,
-        notification: { title: 'ShiftHub', body },
+        notification: { title: subject, body },
+        data: { link: link },
         android: { priority: 'high' },
         apns: { payload: { aps: { sound: 'default', badge: 1 } } },
       })
@@ -188,17 +194,31 @@ exports.onShiftChanged = onDocumentWritten(
 
     // Edited
     if (before?.instructorId && after.instructorId === before.instructorId) {
-      const changed = ['date','start','end','title','address','note'].filter(
+      const changed = ['date','start','end','title','address','note','students','attachments'].filter(
         f => JSON.stringify(before[f]) !== JSON.stringify(after[f])
       )
       if (!changed.length) return
       const snap = await db.collection('users').doc(after.instructorId).get()
       if (!snap.exists) return
       const user = { id: after.instructorId, ...snap.data() }
-      await deliver(user,
-        `Shift updated — ${after.date}`,
-        `Hi ${user.firstName || 'there'},\n\nYour shift has been updated:\n\n  📅 ${after.date}\n  🕐 ${after.start} – ${after.end}\n  📚 ${after.title || 'Shift'}${after.address ? `\n  📍 ${after.address}` : ''}${after.note ? `\n  📝 ${after.note}` : ''}\n\nChanged: ${changed.join(', ')}\n\nhttps://yrshifts.web.app/app`
-      )
+      
+      const wasConfirmed = before?.confirmationStatus === 'confirmed'
+      const timeOrDayChanged = before.date !== after.date || before.start !== after.start || before.end !== after.end
+
+      let subject = `Shift updated — ${after.date}`
+      let body    = `Hi ${user.firstName || 'there'},\n\nYour shift has been updated:\n\n  📅 ${after.date}\n  🕐 ${after.start} – ${after.end}\n  📚 ${after.title || 'Shift'}${after.address ? `\n  📍 ${after.address}` : ''}${after.note ? `\n  📝 ${after.note}` : ''}\n\nChanged: ${changed.join(', ')}\n\nhttps://yrshifts.web.app/app`
+
+      if (wasConfirmed) {
+        if (timeOrDayChanged) {
+          subject = `Important changes to confirmed shift — please confirm again`
+          body    = `important changes to a shift you have already confirmed, please confirm again`
+        } else {
+          subject = `Shift details updated`
+          body    = `details added`
+        }
+      }
+
+      await deliver(user, subject, body)
     }
   }
 )
@@ -356,23 +376,16 @@ exports.createTeacherAccount = onCall(
       try { await db.collection('users').doc(oldId).delete() } catch {}
     }
 
-    // Generate Firebase password reset link
-    // IMPORTANT: we extract the oobCode and build a DIRECT link to our app
-    // so the teacher lands on our page with the code, not Firebase's hosted page
-    const rawLink = await admin.auth().generatePasswordResetLink(email, {
-      url: 'https://yrshifts.web.app/app',
-    })
-
-    // Extract oobCode and build direct app URL
-    let appLink = rawLink  // fallback
-    try {
-      const parsed  = new URL(rawLink)
-      const oobCode = parsed.searchParams.get('oobCode')
-      const apiKey  = parsed.searchParams.get('apiKey')
-      if (oobCode) {
-        appLink = `https://yrshifts.web.app/app?mode=resetPassword&oobCode=${oobCode}&apiKey=${apiKey}&lang=en`
-      }
-    } catch (e) { console.warn('Could not parse reset link:', e.message) }
+    // Generate custom password reset token that expires in 72 hours (to satisfy the 72-hour requirement)
+    const token = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+    await db.collection('password_resets').doc(token).set({
+      email: email.trim().toLowerCase(),
+      token: token,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      expiresAt: new Date(Date.now() + 72 * 60 * 60 * 1000), // 72 hours
+      used: false
+    });
+    const appLink = `https://yrshifts.web.app/app?mode=resetPassword&token=${token}&email=${encodeURIComponent(email)}`;
 
     // Send invite email with the direct app link
     const transport = makeTransport()
@@ -382,7 +395,7 @@ exports.createTeacherAccount = onCall(
           from:    `"ShiftHub" <${process.env.SMTP_USER}>`,
           to:      email,
           subject: `${displayFirst}, you're invited to ShiftHub`,
-          text:    `Hi ${displayFirst},\n\nYou've been added to ShiftHub by Young Rembrandts.\n\nClick the link below to set your password and start using the app:\n\n${appLink}\n\nThis link expires in 1 hour. After signing in, open the app at:\nhttps://yrshifts.web.app/app`,
+          text:    `Hi ${displayFirst},\n\nYou've been added to ShiftHub by Young Rembrandts.\n\nClick the link below to set your password and start using the app:\n\n${appLink}\n\nThis link expires in 72 hours. After signing in, open the app at:\nhttps://yrshifts.web.app/app`,
           html: `<!DOCTYPE html><html><body style="font-family:sans-serif;background:#0F1117;color:#E8ECF4;padding:24px;margin:0">
             <div style="max-width:520px;margin:0 auto">
               <div style="background:#4EA8D6;color:white;border-radius:12px 12px 0 0;padding:20px 24px">
@@ -395,7 +408,7 @@ exports.createTeacherAccount = onCall(
                 <a href="${appLink}" style="display:inline-block;background:#4EA8D6;color:white;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:700;font-size:15px;margin-bottom:20px">
                   Set my password →
                 </a>
-                <p style="color:#5C6380;font-size:12px;margin:0">This link expires in 1 hour. If it doesn't work, copy and paste this into your browser:<br><span style="color:#4EA8D6;word-break:break-all">${appLink}</span></p>
+                <p style="color:#5C6380;font-size:12px;margin:0">This link expires in 72 hours. If it doesn't work, copy and paste this into your browser:<br><span style="color:#4EA8D6;word-break:break-all">${appLink}</span></p>
               </div>
               <p style="color:#5C6380;font-size:11px;text-align:center;margin-top:16px">Young Rembrandts · ShiftHub</p>
             </div></body></html>`,
@@ -449,6 +462,7 @@ function buildReminderBody(user, shift, type) {
 }
 
 function buildSubject(n) {
+  if (n.subject) return n.subject
   switch (n.type) {
     case 'shift_assigned':  return `📅 New shift on ${n.shiftDate}`
     case 'shift_confirmed': return `✅ ${n.actorName} confirmed their shift`
@@ -459,6 +473,7 @@ function buildSubject(n) {
 }
 
 function buildBody(n) {
+  if (n.message) return n.message
   switch (n.type) {
     case 'shift_assigned':  return `Hi ${n.recipientName || 'there'},\n\nYou have a new shift:\n\n  📅 ${n.shiftDate}\n  🕐 ${n.shiftStart} – ${n.shiftEnd}\n  📚 ${n.shiftTitle || 'Shift'}\n\nPlease confirm or reject in the app.\n\nhttps://yrshifts.web.app/app`
     case 'shift_confirmed': return `${n.actorName} confirmed their shift on ${n.shiftDate} at ${n.shiftStart}.`

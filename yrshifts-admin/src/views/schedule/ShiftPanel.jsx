@@ -5,7 +5,7 @@ import useDirectoryStore from '../../stores/useDirectoryStore'
 import useSettingsStore  from '../../stores/useSettingsStore'
 
 import { uid, STUDENTS_OPTS }  from '../../utils/helpers'
-import { TIME_OPTS, calcHours } from '../../utils/time'
+import { TIME_OPTS, calcHours, timeTo24 } from '../../utils/time'
 import { toKey, addDays, isToday, fmtDateLong } from '../../utils/date'
 
 import Button from '../../components/Button'
@@ -77,6 +77,34 @@ function DeleteScopeModal({ onClose, onConfirm }) {
   )
 }
 
+// ── Save template modal ──────────────────────────────────────────────────────
+function SaveTemplateModal({ name, setName, onSave, onCancel }) {
+  return (
+    <Modal onClose={onCancel} zIndex="z-[2000]" width="max-w-sm">
+      <ModalHeader title="Save shift as template" onClose={onCancel} />
+      <div className="mb-4">
+        <label className="block text-xs font-bold text-muted uppercase tracking-wide mb-1.5">Template Name</label>
+        <input 
+          value={name} 
+          onChange={e => setName(e.target.value)} 
+          placeholder="e.g. Woodcrest Assist Shift" 
+          className="w-full bg-raised border border-app rounded-lg px-3 py-2.5 text-sm text-primary placeholder:text-dim outline-none focus:border-accent transition-colors" 
+          autoFocus
+        />
+      </div>
+      <div className="flex justify-end gap-2">
+        <Button onClick={onCancel}>Cancel</Button>
+        <button 
+          onClick={onSave} 
+          className="px-4 py-1.5 bg-accent text-white text-sm font-semibold rounded-lg cursor-pointer border-none hover:opacity-90"
+        >
+          Save Template
+        </button>
+      </div>
+    </Modal>
+  )
+}
+
 // ── Field wrapper ─────────────────────────────────────────────────────────────
 function Field({ label, children }) {
   return (
@@ -92,7 +120,7 @@ const SELECT = `${INPUT} appearance-none cursor-pointer`
 
 // ── Main ShiftPanel ───────────────────────────────────────────────────────────
 export default function ShiftPanel({ shift, dateKey, isNew, onClose, onSaved, sms }) {
-  const { jobs: rawJobs, saveShift, deleteShift } = useScheduleStore()
+  const { jobs: rawJobs, saveShift, deleteShift, savedTemplates, saveTemplates } = useScheduleStore()
   const jobs = rawJobs?.length ? rawJobs : DEFAULT_JOBS
   const { instructors }                  = useDirectoryStore()
   const { payrollTiers }                 = useSettingsStore()
@@ -147,11 +175,203 @@ export default function ShiftPanel({ shift, dateKey, isNew, onClose, onSaved, sm
   const fileRef    = useRef(null)
   const searchTimer = useRef(null)
 
+  const [selectedTemplateId, setSelectedTemplateId] = useState('')
+  const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false)
+  const [newTemplateName, setNewTemplateName] = useState('')
+
+  const handleLoadTemplate = (e) => {
+    const tid = e.target.value
+    setSelectedTemplateId(tid)
+    if (!tid) return
+    const t = savedTemplates.find(x => x.id === tid)
+    if (t) {
+      if (t.title) setTitle(t.title)
+      if (t.job) setJob(t.job)
+      if (t.start) setStart(t.start)
+      if (t.end) setEnd(t.end)
+      if (t.students !== undefined) setStudents(t.students || '')
+      if (t.address) setAddress(t.address)
+      if (t.note) setNote(t.note)
+    }
+  }
+
+  const handleDeleteTemplate = async () => {
+    if (!selectedTemplateId) return
+    const updated = savedTemplates.filter(t => t.id !== selectedTemplateId)
+    try {
+      await saveTemplates(updated)
+      setSelectedTemplateId('')
+    } catch (e) {
+      console.error(e)
+      setErr('Failed to delete template.')
+    }
+  }
+
+  const handleSaveTemplate = async () => {
+    if (!newTemplateName.trim()) {
+      alert('Please enter a template name.')
+      return
+    }
+    const newT = {
+      id: uid(),
+      templateName: newTemplateName.trim(),
+      title,
+      job,
+      start,
+      end,
+      students: students ? Number(students) : '',
+      address,
+      note,
+    }
+    const updated = [...(savedTemplates || []), newT]
+    try {
+      await saveTemplates(updated)
+      setShowSaveTemplateModal(false)
+      setNewTemplateName('')
+      setSelectedTemplateId(newT.id)
+    } catch (e) {
+      console.error(e)
+      setErr('Failed to save template.')
+    }
+  }
+
   // ── Computed ────────────────────────────────────────────────────────────────
   const hours        = calcHours(start, end)
   const sortedDates  = useMemo(() => [...selectedDates].sort(), [selectedDates])
   const startDate    = sortedDates[0] || ''
   const effectiveDates = sortedDates.filter(d => !skipDates.has(d))
+
+  const hasOverlappingShift = (teacherId, dateStr, startTime, endTime, excludeShiftId, excludeSeriesId) => {
+    const siblings = useScheduleStore.getState().rawShifts.filter(s => {
+      if (s.instructorId !== teacherId) return false
+      if (s.date !== dateStr) return false
+      if (s.status === 'cancelled') return false
+      if (s.id === excludeShiftId) return false
+      if (excludeSeriesId && s.seriesId === excludeSeriesId) return false
+      return true
+    })
+    const shiftStart = timeTo24(startTime)
+    let shiftEnd = timeTo24(endTime)
+    if (shiftEnd <= shiftStart) shiftEnd += 1440
+    
+    for (const s of siblings) {
+      const sStart = timeTo24(s.start)
+      let sEnd = timeTo24(s.end)
+      if (sEnd <= sStart) sEnd += 1440
+      if (shiftStart < sEnd && sStart < shiftEnd) {
+        return true
+      }
+    }
+    return false
+  }
+
+  // ── Conflict highlights ───────────────────────────────────────────────────
+  const getConflictText = (instructor) => {
+    if (!instructor || !instructor.unavailability || !instructor.unavailability.length) return null
+    
+    const shiftStart = timeTo24(start)
+    let shiftEnd = timeTo24(end)
+    if (shiftEnd <= shiftStart) shiftEnd += 1440
+
+    const formatTime = (timeStr) => {
+      if (!timeStr || typeof timeStr !== 'string') return ''
+      const parts = timeStr.split(':')
+      if (parts.length < 2) return ''
+      const [h, m] = parts.map(Number)
+      if (isNaN(h) || isNaN(m)) return ''
+      const ampm = h >= 12 ? 'PM' : 'AM'
+      return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${ampm}`
+    }
+
+    const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    const datesToCheck = effectiveDates.length ? effectiveDates : [shift.date || dateKey].filter(Boolean)
+
+    for (const dateStr of datesToCheck) {
+      const d = new Date(dateStr + 'T12:00:00')
+      if (isNaN(d.getTime())) continue
+      const dayAbbrev = daysOfWeek[d.getDay()]
+
+      for (const slot of instructor.unavailability) {
+        if (slot.day === dayAbbrev) {
+          if (!slot.start || !slot.end) continue
+          const startParts = slot.start.split(':')
+          const endParts = slot.end.split(':')
+          if (startParts.length < 2 || endParts.length < 2) continue
+          const [sh, sm] = startParts.map(Number)
+          const [eh, em] = endParts.map(Number)
+          if (isNaN(sh) || isNaN(sm) || isNaN(eh) || isNaN(em)) continue
+          const slotStart = sh * 60 + sm
+          let slotEnd = eh * 60 + em
+          if (slotEnd <= slotStart) slotEnd += 1440
+
+          if (shiftStart < slotEnd && slotStart < shiftEnd) {
+            return `${slot.day} ${formatTime(slot.start)}–${formatTime(slot.end)}`
+          }
+        }
+      }
+    }
+    return null
+  }
+
+  const suggestedReplacements = useMemo(() => {
+    if (!title || !title.trim()) return []
+
+    const allShifts = useScheduleStore.getState().rawShifts || []
+    const matchTitle = title.trim().toLowerCase()
+    const datesToCheck = effectiveDates.length ? effectiveDates : [shift.date || dateKey].filter(Boolean)
+
+    return instructors
+      .map(inst => {
+        if (inst.id === shift.instructorId && shift.confirmationStatus === 'rejected') {
+          return null
+        }
+
+        if (getConflictText(inst)) return null
+
+        let hasOverlap = false
+        for (const dateStr of datesToCheck) {
+          if (hasOverlappingShift(inst.id, dateStr, start, end, shift.id, shift.seriesId)) {
+            hasOverlap = true
+            break
+          }
+        }
+        if (hasOverlap) return null
+
+        const score = allShifts.filter(s =>
+          s.instructorId === inst.id &&
+          s.title &&
+          s.title.trim().toLowerCase() === matchTitle &&
+          s.status !== 'cancelled'
+        ).length
+
+        return { instructor: inst, score }
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.score - a.score)
+  }, [instructors, title, selectedDates, skipDates, start, end, shift.instructorId, shift.confirmationStatus, shift.id, dateKey])
+
+  const selectedInstructor = useMemo(() => {
+    return instructors.find(i => i.id === instructorId)
+  }, [instructors, instructorId])
+
+  const activeConflict = useMemo(() => {
+    if (!selectedInstructor) return null
+    
+    // Check unavailability slot conflict
+    const unavailText = getConflictText(selectedInstructor)
+    if (unavailText) return { type: 'unavailability', text: unavailText }
+    
+    // Check overlapping shift conflict
+    const datesToCheck = effectiveDates.length ? effectiveDates : [shift.date || dateKey].filter(Boolean)
+    for (const dateStr of datesToCheck) {
+      if (hasOverlappingShift(selectedInstructor.id, dateStr, start, end, shift.id, shift.seriesId)) {
+        return { type: 'overlap', text: `overlapping shift on ${dateStr}` }
+      }
+    }
+    
+    return null
+  }, [selectedInstructor, effectiveDates, start, end, shift.id, dateKey])
+
   const previewRate  = students > 0 ? (tiers.find(t => Number(students) <= t.maxStudents)?.ratePerHour || 0) : 0
   const previewTotal = previewRate * hours.decimal
 
@@ -263,7 +483,7 @@ export default function ShiftPanel({ shift, dateKey, isNew, onClose, onSaved, sm
   return (
     <>
       {/* Backdrop */}
-      <div className="fixed inset-0 z-[1000] bg-black/50 flex justify-end" onClick={onClose}>
+      <div className="absolute inset-0 z-[1000] bg-black/50 flex justify-end" onClick={onClose}>
         {/* Panel */}
         <div className="relative w-[540px] max-w-[95vw] h-full bg-surface flex flex-col shadow-2xl animate-slide-in"
           onClick={e => e.stopPropagation()}>
@@ -276,6 +496,18 @@ export default function ShiftPanel({ shift, dateKey, isNew, onClose, onSaved, sm
 
           {/* Scrollable body */}
           <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
+
+            {shift.confirmationStatus === 'rejected' && (
+              <div className="p-3.5 bg-danger-soft border border-danger/30 text-danger text-xs rounded-xl flex items-start gap-2.5 animate-fade-in">
+                <span className="text-sm">⚠️</span>
+                <div>
+                  <p className="font-extrabold text-danger uppercase tracking-wide">Shift Rejected</p>
+                  <p className="text-[11px] opacity-90 mt-0.5 font-medium leading-relaxed">
+                    The assigned instructor has rejected this shift. Please review availability and assign a replacement.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Calendar */}
             <div className="bg-card border border-app rounded-xl p-4 flex flex-col gap-3">
@@ -317,6 +549,35 @@ export default function ShiftPanel({ shift, dateKey, isNew, onClose, onSaved, sm
                 {selectedDates.size > 0 && (
                   <button onClick={() => { setSelectedDates(new Set()); setSkipDates(new Set()) }}
                     className="text-accent font-semibold cursor-pointer bg-transparent border-none">Clear all</button>
+                )}
+              </div>
+            </div>
+
+            {/* Shift Templates */}
+            <div className="bg-card border border-app rounded-xl p-4 flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-bold text-primary">⏱ Shift Template</span>
+                <span className="text-xs text-dim">Quickly pre-fill common shift details</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <select
+                  value={selectedTemplateId}
+                  onChange={handleLoadTemplate}
+                  className={SELECT + ' flex-1'}
+                >
+                  <option value="">Choose a template…</option>
+                  {(savedTemplates || []).map(t => (
+                    <option key={t.id} value={t.id}>{t.templateName || t.title}</option>
+                  ))}
+                </select>
+                {selectedTemplateId && (
+                  <button
+                    onClick={handleDeleteTemplate}
+                    title="Delete selected template"
+                    className="w-10 h-10 rounded-xl bg-raised border border-app hover:border-danger hover:text-danger flex items-center justify-center text-sm cursor-pointer transition-colors"
+                  >
+                    🗑
+                  </button>
                 )}
               </div>
             </div>
@@ -391,18 +652,110 @@ export default function ShiftPanel({ shift, dateKey, isNew, onClose, onSaved, sm
             {/* Instructor */}
             <Field label="Instructor">
               <div>
-                <select value={instructorId}
-                  onChange={e => { setInstructorId(e.target.value); if (e.target.value !== 'UNASSIGNED') setClaimable(false) }}
-                  className={`${SELECT} ${instructorId !== 'UNASSIGNED' ? 'text-primary' : 'text-dim'}`}>
-                  <option value="UNASSIGNED">⚡ Open shift (unassigned)</option>
-                  {instructors.map(i => <option key={i.id} value={i.id}>{i.firstName} {i.lastName}</option>)}
-                </select>
+                <div className="flex gap-2">
+                  <select value={instructorId}
+                    onChange={e => { setInstructorId(e.target.value); if (e.target.value !== 'UNASSIGNED') setClaimable(false) }}
+                    className={`${SELECT} ${instructorId !== 'UNASSIGNED' ? 'text-primary' : 'text-dim'} flex-1`}>
+                    <option value="UNASSIGNED">⚡ Open shift (unassigned)</option>
+                    {instructors.map(i => {
+                      const conflict = getConflictText(i)
+                      const datesToCheck = effectiveDates.length ? effectiveDates : [shift.date || dateKey].filter(Boolean)
+                      let overlap = false
+                      for (const dateStr of datesToCheck) {
+                        if (hasOverlappingShift(i.id, dateStr, start, end, shift.id, shift.seriesId)) {
+                          overlap = true
+                          break
+                        }
+                      }
+                      
+                      let suffix = ''
+                      if (conflict) suffix = ` (⚠️ Unavail: ${conflict})`
+                      else if (overlap) suffix = ' (⚠️ Overlaps Shift)'
+
+                      return (
+                        <option key={i.id} value={i.id}>
+                          {i.firstName} {i.lastName}{suffix}
+                        </option>
+                      )
+                    })}
+                  </select>
+                  {suggestedReplacements.length > 0 && (instructorId === 'UNASSIGNED' || shift.confirmationStatus === 'rejected') && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const best = suggestedReplacements[0]
+                        if (best) {
+                          setInstructorId(best.instructor.id)
+                          setClaimable(false)
+                        }
+                      }}
+                      title="AI Auto-Schedule Best Instructor"
+                      className="px-3 bg-accent-soft hover:bg-accent hover:text-white border border-accent/30 text-accent font-bold rounded-xl text-xs cursor-pointer transition-all flex items-center justify-center gap-1 shrink-0"
+                    >
+                      🤖 Auto-Schedule
+                    </button>
+                  )}
+                </div>
+
+                {activeConflict && (
+                  <div className="mt-2.5 p-3 rounded-xl bg-danger-soft border border-red-500/20 text-danger text-xs flex items-start gap-2.5 animate-fade-in">
+                    <span className="text-sm">⚠️</span>
+                    <div>
+                      <p className="font-bold">
+                        {activeConflict.type === 'overlap' ? 'Overlapping Shift Alert' : 'Schedule Conflict'}
+                      </p>
+                      <p className="text-[11px] opacity-80 mt-0.5">
+                        {activeConflict.type === 'overlap' 
+                          ? `This teacher is already assigned to an overlapping shift (${activeConflict.text}).`
+                          : `This teacher is marked as unavailable during this shift's time (${activeConflict.text}).`}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 <label className="flex items-center gap-2 mt-2.5 cursor-pointer">
                   <input type="checkbox" checked={claimable}
                     onChange={e => { setClaimable(e.target.checked); if (e.target.checked) setInstructorId('UNASSIGNED') }}
                     className="accent-danger w-4 h-4 cursor-pointer" />
                   <span className="text-sm text-primary">Open shift — notify all teachers</span>
                 </label>
+
+                {suggestedReplacements.length > 0 && (
+                  <div className="mt-3.5 bg-raised border border-app rounded-xl p-3 flex flex-col gap-2">
+                    <p className="text-[11px] font-bold text-muted uppercase tracking-wider">
+                      {shift.confirmationStatus === 'rejected' ? '🧠 Smart Substitution Suggestions' : '🤖 AI Auto-Scheduling Suggestions'}
+                    </p>
+                    <p className="text-[10px] text-dim -mt-1">
+                      {shift.confirmationStatus === 'rejected'
+                        ? 'Best available replacements ranked by familiarity with this session title in shifts history:'
+                        : 'Eligible available instructors ranked by familiarity with this session title in shifts history:'}
+                    </p>
+                    <div className="flex flex-col gap-1.5 max-h-40 overflow-y-auto pr-1">
+                      {suggestedReplacements.slice(0, 5).map(({ instructor: inst, score }) => (
+                        <button
+                          key={inst.id}
+                          type="button"
+                          onClick={() => {
+                            setInstructorId(inst.id)
+                            setClaimable(false)
+                          }}
+                          className="flex items-center gap-2.5 p-2 rounded-lg border border-app bg-card hover:border-accent hover:bg-accent-soft text-left transition-colors cursor-pointer w-full font-sans animate-fade-in"
+                        >
+                          <div className="w-6 h-6 rounded-full flex items-center justify-center text-2xs font-bold text-white flex-shrink-0"
+                            style={{ background: inst.color || 'var(--accent)' }}>
+                            {inst.firstName?.[0]}{inst.lastName?.[0]}
+                          </div>
+                          <span className="text-xs font-semibold text-primary flex-1 truncate">
+                            {inst.firstName} {inst.lastName}
+                          </span>
+                          <span className="text-[10px] font-extrabold px-2 py-0.5 rounded bg-accent-soft text-accent whitespace-nowrap">
+                            {score} past shift{score !== 1 ? 's' : ''}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </Field>
 
@@ -465,8 +818,7 @@ export default function ShiftPanel({ shift, dateKey, isNew, onClose, onSaved, sm
             </Button>
             <Button onClick={handleDraft} disabled={isUploading}>Draft</Button>
             <Button variant="danger" onClick={() => setConfirmDel(true)}>🗑</Button>
-            <div className="flex-1" />
-            <Button onClick={() => { /* save template */ onClose() }} disabled={isUploading}>⏱ Template</Button>
+            <Button onClick={() => setShowSaveTemplateModal(true)} disabled={isUploading}>⏱ Save Template</Button>
           </div>
         </div>
       </div>
@@ -485,6 +837,15 @@ export default function ShiftPanel({ shift, dateKey, isNew, onClose, onSaved, sm
         <DeleteScopeModal
           onClose={() => setConfirmDel(false)}
           onConfirm={scope => { handleDelete(scope); setConfirmDel(false) }}
+        />
+      )}
+
+      {showSaveTemplateModal && (
+        <SaveTemplateModal
+          name={newTemplateName}
+          setName={setNewTemplateName}
+          onSave={handleSaveTemplate}
+          onCancel={() => setShowSaveTemplateModal(false)}
         />
       )}
     </>

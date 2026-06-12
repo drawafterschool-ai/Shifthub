@@ -90,10 +90,42 @@ service cloud.firestore {
 
     // ── Chat ──────────────────────────────────────────────────────────────────
     match /chats/{chatId} {
-      allow read, write: if isSignedIn();
+      allow read:   if isSignedIn() && (
+        isAdmin() ||
+        resource.data.isGroup == true ||
+        request.auth.uid in resource.data.members
+      );
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        resource.data.isGroup == true ||
+        request.auth.uid in resource.data.members
+      );
+      allow delete: if isSignedIn() && (
+        isAdmin() || request.auth.uid == resource.data.createdBy
+      );
       match /messages/{msgId} {
-        allow read, write: if isSignedIn();
+        allow read:   if isSignedIn();
+        allow create: if isSignedIn();
+        allow update: if isSignedIn();
+        allow delete: if isSignedIn() && (
+          isAdmin() || request.auth.uid == resource.data.authorId
+        );
       }
+    }
+
+    // ── Forms Templates ──────────────────────────────────────────────────────────
+    match /forms/{formId} {
+      allow read:  if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ── Forms Assigned ──────────────────────────────────────────────────────────
+    match /forms_assigned/{assignmentId} {
+      allow read:   if isAdmin() || (isSignedIn() && resource.data.teacherId == request.auth.uid);
+      allow create: if isAdmin();
+      allow update: if isAdmin() || (isSignedIn() && resource.data.teacherId == request.auth.uid);
+      allow delete: if isAdmin();
     }
   }
 }

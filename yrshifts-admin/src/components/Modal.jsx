@@ -1,8 +1,8 @@
 export default function Modal({ children, onClose, width = 'max-w-sm', zIndex = 'z-[1100]' }) {
   return (
-    <div className={`fixed inset-0 ${zIndex} flex items-center justify-center`}>
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className={`relative w-full ${width} mx-4 bg-card border border-app rounded-2xl p-6 shadow-2xl animate-fade-in`}>
+    <div className={`fixed inset-0 ${zIndex} overflow-y-auto p-4 md:p-6 flex items-start justify-center`}>
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className={`relative w-full ${width} bg-card border border-app rounded-2xl p-6 shadow-2xl animate-fade-in my-auto`}>
         {children}
       </div>
     </div>
