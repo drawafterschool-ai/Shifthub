@@ -14,7 +14,9 @@ export default class ErrorBoundary extends Component {
     console.error('ErrorBoundary caught:', error, info)
 
     const msg = error?.message || ''
-    const isChunkError = msg.includes('Failed to fetch dynamically imported module') || msg.includes('chunk') || msg.includes('dynamic')
+    // Cover all browsers: Chrome ("Failed to fetch dynamically imported module"),
+    // Firefox ("error loading dynamically imported module"), iOS Safari ("Importing a module script failed.")
+    const isChunkError = msg.includes('Failed to fetch dynamically imported module') || msg.includes('chunk') || msg.includes('dynamic') || msg.includes('module script') || msg.includes('MIME')
     if (isChunkError) {
       const storageKey = 'shifthub_teacher_chunk_reload'
       const reloadCount = parseInt(sessionStorage.getItem(storageKey) || '0', 10)

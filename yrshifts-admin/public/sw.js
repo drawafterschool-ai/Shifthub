@@ -40,7 +40,7 @@ self.addEventListener('notificationclick', event => {
   )
 })
 
-const CACHE = 'shifthub-admin-v5'
+const CACHE = 'shifthub-admin-v6'
 
 // Pre-cache the shell on install
 self.addEventListener('install', e => {
@@ -75,7 +75,7 @@ self.addEventListener('fetch', e => {
           }
           return res
         })
-        .catch(() => caches.match(request) || caches.match('/admin/'))
+        .catch(() => caches.match(request).then(cached => cached || caches.match('/admin/')))
     )
     return
   }
@@ -86,7 +86,10 @@ self.addEventListener('fetch', e => {
       caches.match(request).then(cached => {
         if (cached) return cached
         return fetch(request).then(res => {
-          if (res.status === 200) {
+          // Don't cache SPA-rewrite responses: a deleted asset URL returns
+          // index.html with status 200, which would poison the cache
+          const type = res.headers.get('content-type') || ''
+          if (res.status === 200 && !type.includes('text/html')) {
             const clone = res.clone()
             caches.open(CACHE).then(c => c.put(request, clone))
           }
