@@ -40,7 +40,7 @@ self.addEventListener('notificationclick', event => {
   )
 })
 
-const CACHE = 'shifthub-teacher-v5'
+const CACHE = 'shifthub-teacher-v6'
 
 self.addEventListener('install', e => {
   self.skipWaiting()
@@ -71,7 +71,7 @@ self.addEventListener('fetch', e => {
           }
           return res
         })
-        .catch(() => caches.match(request) || caches.match('/app/'))
+        .catch(() => caches.match(request).then(cached => cached || caches.match('/app/')))
     )
     return
   }
@@ -81,7 +81,10 @@ self.addEventListener('fetch', e => {
       caches.match(request).then(cached => {
         if (cached) return cached
         return fetch(request).then(res => {
-          if (res.status === 200) {
+          // Don't cache SPA-rewrite responses: a deleted asset URL returns
+          // index.html with status 200, which would poison the cache
+          const type = res.headers.get('content-type') || ''
+          if (res.status === 200 && !type.includes('text/html')) {
             const clone = res.clone()
             caches.open(CACHE).then(c => c.put(request, clone))
           }
