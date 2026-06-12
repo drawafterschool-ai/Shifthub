@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useOutletContext }   from 'react-router-dom'
 import { httpsCallable } from 'firebase/functions'
 import { functions }     from '../../utils/firebase'
@@ -97,15 +97,45 @@ function AddModal({ onClose }) {
 }
 
 // ── Invite modal ───────────────────────────────────────────────────────────────
+// ── Invite modal ───────────────────────────────────────────────────────────────
 function InviteModal({ instructor, onClose }) {
   const isNew = !instructor?.firstName  // opened from toolbar with no instructor
+  const { instructors } = useDirectoryStore()
+
+  const latestInst = useMemo(() => {
+    if (!instructor?.id) return instructor
+    return instructors.find(i => i.id === instructor.id) || instructor
+  }, [instructor, instructors])
+
   const [status,    setStatus]    = useState('idle')
-  const [email,     setEmail]     = useState(instructor?.email     || '')
-  const [firstName, setFirstName] = useState(instructor?.firstName || '')
-  const [lastName,  setLastName]  = useState(instructor?.lastName  || '')
+  const [email,     setEmail]     = useState(latestInst?.email     || '')
+  const [firstName, setFirstName] = useState(latestInst?.firstName || '')
+  const [lastName,  setLastName]  = useState(latestInst?.lastName  || '')
   const [copyMsg,   setCopyMsg]   = useState('')
   const [inviteLink,setInviteLink]= useState('')
   const [sentName,  setSentName]  = useState('')
+
+  const [isEmailDirty, setIsEmailDirty] = useState(false)
+  const [isFirstDirty, setIsFirstDirty] = useState(false)
+  const [isLastDirty,  setIsLastDirty]  = useState(false)
+
+  useEffect(() => {
+    if (!isEmailDirty && latestInst?.email !== undefined) {
+      setEmail(latestInst.email || '')
+    }
+  }, [latestInst?.email, isEmailDirty])
+
+  useEffect(() => {
+    if (!isFirstDirty && latestInst?.firstName !== undefined) {
+      setFirstName(latestInst.firstName || '')
+    }
+  }, [latestInst?.firstName, isFirstDirty])
+
+  useEffect(() => {
+    if (!isLastDirty && latestInst?.lastName !== undefined) {
+      setLastName(latestInst.lastName || '')
+    }
+  }, [latestInst?.lastName, isLastDirty])
 
   const INPUT = "w-full bg-raised border border-app rounded-lg px-3 py-2.5 text-sm text-primary placeholder:text-dim outline-none focus:border-accent transition-colors"
 
@@ -121,9 +151,9 @@ function InviteModal({ instructor, onClose }) {
         firstName: fn1,
         lastName:  lastName.trim(),
         email:     addr,
-        phone:     instructor?.phone || '',
-        color:     instructor?.color || '#6366F1',
-        oldId:     instructor?.id   || null,
+        phone:     latestInst?.phone || '',
+        color:     latestInst?.color || '#6366F1',
+        oldId:     latestInst?.id   || null,
       })
       setSentName(fn1)
       setInviteLink(result.data.link || '')
@@ -143,15 +173,17 @@ function InviteModal({ instructor, onClose }) {
 
   return (
     <Modal onClose={onClose} width="max-w-sm">
-      <ModalHeader title="Invite teacher" onClose={onClose} />
+      <ModalHeader title={isNew ? "Invite teacher" : "Reset password"} onClose={onClose} />
 
       {status === 'sent' ? (
         <div className="flex flex-col gap-4">
           <div className="text-center py-2">
             <p className="text-4xl mb-3">✅</p>
-            <p className="text-base font-bold text-primary mb-1">Invite sent!</p>
+            <p className="text-base font-bold text-primary mb-1">
+              {isNew ? 'Invite sent!' : 'Reset link sent!'}
+            </p>
             <p className="text-sm text-muted leading-relaxed">
-              An email with a sign-in link has been sent to <strong>{email}</strong>.
+              An email with a {isNew ? 'sign-in' : 'reset'} link has been sent to <strong>{email}</strong>.
               They can also use the link below if the email doesn't arrive.
             </p>
           </div>
@@ -174,40 +206,38 @@ function InviteModal({ instructor, onClose }) {
       ) : (
         <>
           <div className="flex items-center gap-3 mb-5 p-3 bg-raised rounded-xl">
-            <Avatar firstName={instructor?.firstName} lastName={instructor?.lastName}
-              color={instructor?.color} photo={instructor?.photo} size={40} />
+            <Avatar firstName={latestInst?.firstName} lastName={latestInst?.lastName}
+              color={latestInst?.color} photo={latestInst?.photo} size={40} />
             <div>
-              <p className="text-sm font-bold text-primary">{instructor?.firstName} {instructor?.lastName}</p>
-              <p className="text-xs text-dim">{instructor?.role || 'teacher'}</p>
+              <p className="text-sm font-bold text-primary">{latestInst?.firstName} {latestInst?.lastName}</p>
+              <p className="text-xs text-dim">{latestInst?.role || 'teacher'}</p>
             </div>
           </div>
 
-          {/* Name fields — shown when inviting a brand-new person from toolbar */}
-          {isNew && (
-            <div className="flex gap-3 mb-4">
-              <div className="flex-1">
-                <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1.5">First name *</label>
-                <input value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="e.g. Sarah"
-                  className={INPUT} autoFocus />
-              </div>
-              <div className="flex-1">
-                <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1.5">Last name</label>
-                <input value={lastName} onChange={e => setLastName(e.target.value)} placeholder="e.g. Nicholas"
-                  className={INPUT} />
-              </div>
+          <div className="flex gap-3 mb-4">
+            <div className="flex-1">
+              <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1.5">First name *</label>
+              <input value={firstName} onChange={e => { setFirstName(e.target.value); setIsFirstDirty(true); }} placeholder="e.g. Sarah"
+                className={INPUT} autoFocus={isNew} />
             </div>
-          )}
+            <div className="flex-1">
+              <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1.5">Last name</label>
+              <input value={lastName} onChange={e => { setLastName(e.target.value); setIsLastDirty(true); }} placeholder="e.g. Nicholas"
+                className={INPUT} />
+            </div>
+          </div>
 
           <div className="mb-4">
             <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1.5">Email address *</label>
-            <input value={email} onChange={e => setEmail(e.target.value)} placeholder="teacher@example.com"
+            <input value={email} onChange={e => { setEmail(e.target.value); setIsEmailDirty(true); }} placeholder="teacher@example.com"
               type="email" className={INPUT} autoFocus={!isNew} />
           </div>
 
           <div className="bg-accent-soft border border-accent/20 rounded-xl px-4 py-3 mb-5">
             <p className="text-xs text-accent leading-relaxed">
-              Creates their login account and sends a set-password link.
-              Once signed in they'll see their schedule at{' '}
+              {isNew
+                ? "Creates their login account and sends a set-password link. Once signed in they'll see their schedule at "
+                : "Sends a reset-password link. Once signed in they'll see their schedule at "}
               <span className="font-mono font-bold">yrshifts.web.app/app</span>
             </p>
           </div>
@@ -227,7 +257,7 @@ function InviteModal({ instructor, onClose }) {
           <ModalFooter>
             <Button onClick={onClose}>Cancel</Button>
             <Button variant="primary" onClick={handleSend} disabled={status === 'sending'} icon="📧">
-              {status === 'sending' ? 'Creating account…' : 'Send invite'}
+              {status === 'sending' ? 'Sending reset link…' : 'Reset password'}
             </Button>
           </ModalFooter>
         </>
@@ -477,7 +507,7 @@ export default function DirectoryView() {
                   <td className="px-4 py-2.5 text-right pr-5">
                     <div className="flex items-center justify-end gap-2">
                       {!isAdmin && (
-                        <button onClick={() => setInviting(inst)} title="Send invite"
+                        <button onClick={() => setInviting(inst)} title="Reset password"
                           className="text-dim hover:text-accent transition-colors cursor-pointer bg-transparent border-none text-base">📧</button>
                       )}
                       {canManageRoles && (
@@ -508,7 +538,7 @@ export default function DirectoryView() {
       {/* Footer */}
       <div className="px-7 py-2.5 bg-surface border-t border-app flex justify-between text-xs text-dim flex-shrink-0">
         <span>{filtered.length} user{filtered.length !== 1 ? 's' : ''}</span>
-        <span>Double-click a cell to edit · Click avatar to upload photo · 📧 to invite</span>
+        <span>Double-click a cell to edit · Click avatar to upload photo · 📧 to reset password</span>
       </div>
 
       {/* Modals */}

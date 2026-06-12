@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useOutletContext }       from 'react-router-dom'
 
 import useScheduleStore  from '../../stores/useScheduleStore'
@@ -6,7 +6,7 @@ import useDirectoryStore from '../../stores/useDirectoryStore'
 
 import { DAYS, toKey, getWeekDates, getMonthDates, fmtDate, isToday } from '../../utils/date'
 import { calcHours } from '../../utils/time'
-import { makeShift, UNASSIGNED } from '../../utils/schedule'
+import { makeShift, groupShifts, UNASSIGNED } from '../../utils/schedule'
 import { exportCSV }             from '../../utils/exportCSV'
 
 import Avatar   from '../../components/Avatar'
@@ -14,6 +14,7 @@ import Button   from '../../components/Button'
 import DropCell from '../../components/DropCell'
 import Modal, { ModalHeader } from '../../components/Modal'
 import ShiftPanel from './ShiftPanel'
+import ImportModal from '../../components/ImportModal'
 
 // ── Export modal — month picker ───────────────────────────────────────────────
 function ExportModal({ onClose, onExport }) {
@@ -128,8 +129,12 @@ function DeleteScopeModal({ onClose, onConfirm }) {
 
 export default function ScheduleView() {
   const sms = useOutletContext()
-  const { schedule, jobs, loading, moveShift, duplicateShift, multiDupShift, unassignShift, deleteShift } = useScheduleStore()
+  const { rawShifts, jobs, loading, moveShift, duplicateShift, multiDupShift, unassignShift, deleteShift } = useScheduleStore()
   const { instructors } = useDirectoryStore()
+
+  const schedule = useMemo(() => {
+    return groupShifts(rawShifts, instructors.map(i => i.id))
+  }, [rawShifts, instructors])
 
   const [ctx,           setCtx]           = useState(null)
   const [pendingDrop,   setPendingDrop]   = useState(null)
@@ -138,6 +143,7 @@ export default function ScheduleView() {
   const [viewMode,      setViewMode]      = useState('week')
   const [toast,         setToast]         = useState(null)
   const [exportModal,   setExportModal]   = useState(false)
+  const [importModal,   setImportModal]   = useState(false)
 
   const weekDates = getWeekDates(weekOffset)
   const weekKeys  = weekDates.map(toKey)
@@ -173,7 +179,7 @@ export default function ScheduleView() {
     onDrop:        handleDrop,
     onShiftClick:  (_o, d, s) => setCtx({ shift: s, dateKey: d, isNew: false }),
     onDragShift:   () => {},
-    onAddShift:    (_o, d)    => setCtx({ shift: makeShift({ date: d }), dateKey: d, isNew: true }),
+    onAddShift:    (_o, d)    => setCtx({ shift: makeShift({ date: d, instructorId: _o === UNASSIGNED ? null : _o }), dateKey: d, isNew: true }),
     onDuplicate:   chipDuplicate,
     onMultiDup:    chipMultiDup,
     onUnassign:    chipUnassign,
@@ -234,6 +240,7 @@ export default function ScheduleView() {
           <Button small onClick={() => setWeekOffset(0)}>Today</Button>
           <Button small variant="ghost" onClick={() => setWeekOffset(o => o + 1)}>→</Button>
           <div className="w-px h-5 bg-app mx-1" />
+          <Button small icon="📤" onClick={() => setImportModal(true)}>Import</Button>
           <Button small icon="📥" onClick={() => setExportModal(true)}>Export</Button>
         </div>
       </div>
@@ -268,11 +275,11 @@ export default function ScheduleView() {
             </div>
 
             {/* Instructor rows */}
-            {instructors.map(emp => {
+            {instructors.map((emp, index) => {
               const eid = String(emp.id); const es = schedule[eid] || {}
               const wc  = weekKeys.reduce((s, k) => s + (es[k]?.length || 0), 0)
               return (
-                <div key={eid} className="grid grid-cols-schedule gap-1 py-1 border-t border-app/30">
+                <div key={eid} className={`grid grid-cols-schedule gap-1 py-1 border-t border-app/30 ${index % 2 === 0 ? 'bg-surface' : ''}`}>
                   <div className="flex items-center gap-1.5 px-1.5 py-0.5">
                     <Avatar firstName={emp.firstName} lastName={emp.lastName} color={emp.color} photo={emp.photo} size={26} />
                     <div className="min-w-0">
@@ -320,6 +327,17 @@ export default function ScheduleView() {
             exportCSV(schedule, instructors, jobs, y, m)
             setExportModal(false)
           }}
+        />
+      )}
+      {importModal && (
+        <ImportModal
+          onClose={() => setImportModal(false)}
+          onImported={(msg) => {
+            showToast(msg)
+            setImportModal(false)
+          }}
+          existingInstructors={instructors}
+          jobs={jobs}
         />
       )}
       {pendingDrop && <ConfirmDropModal drop={pendingDrop} instructors={instructors} onClose={() => setPendingDrop(null)} onConfirm={confirmDrop} />}

@@ -23,10 +23,12 @@ export const makeShift = (overrides = {}) => ({
 })
 
 /** Group flat shift array → { [ownerId]: { [dateKey]: Shift[] } } */
-export const groupShifts = (shifts = []) => {
+export const groupShifts = (shifts = [], activeIds = []) => {
   const map = {}
+  const activeSet = new Set(activeIds.map(String))
   for (const s of shifts) {
-    const owner = s.instructorId || UNASSIGNED
+    const isAssigned = s.instructorId && (activeIds.length === 0 || activeSet.has(String(s.instructorId)))
+    const owner = isAssigned ? String(s.instructorId) : UNASSIGNED
     if (!map[owner])       map[owner] = {}
     if (!map[owner][s.date]) map[owner][s.date] = []
     map[owner][s.date].push(s)

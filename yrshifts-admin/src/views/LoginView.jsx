@@ -1,9 +1,9 @@
-import { useState }                       from 'react'
+import { useState, useEffect }             from 'react'
 import { useNavigate }                     from 'react-router-dom'
-import { signInWithEmailAndPassword }      from 'firebase/auth'
-import { useEffect }                       from 'react'
+import { signInWithEmailAndPassword, setPersistence, browserLocalPersistence, browserSessionPersistence } from 'firebase/auth'
 import useAuthStore                        from '../stores/useAuthStore'
 import { auth }                            from '../utils/firebase'
+import { isBiometricsSupported, authenticateBiometrics, isBiometricsEnabled } from '../utils/biometric'
 
 export default function LoginView() {
   const navigate = useNavigate()
@@ -20,12 +20,57 @@ export default function LoginView() {
   const [password, setPassword] = useState('')
   const [error,    setError]    = useState('')
   const [loading,  setLoading]  = useState(false)
+  const [staySignedIn, setStaySignedIn] = useState(true)
+  const [bioSupported, setBioSupported] = useState(false)
+  const [bioEnabled, setBioEnabled] = useState(false)
+
+  const handleBiometricLogin = async () => {
+    setError('')
+    setLoading(true)
+    try {
+      const creds = await authenticateBiometrics()
+      await signInWithEmailAndPassword(auth, creds.email, creds.password)
+    } catch (err) {
+      console.warn('Biometric login failed:', err)
+      setError(err.message || 'Biometric authentication failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    async function checkBio() {
+      const supported = await isBiometricsSupported()
+      setBioSupported(supported)
+      const enabled = isBiometricsEnabled()
+      setBioEnabled(enabled)
+      
+      if (supported && enabled) {
+        // Safe delayed prompt for a seamless PWA experience
+        setTimeout(() => {
+          handleBiometricLogin()
+        }, 600)
+      }
+    }
+    checkBio()
+  }, [])
+
+  if (authLoading) return (
+    <div className="w-screen h-screen flex flex-col items-center justify-center bg-app gap-4">
+      <div className="w-16 h-16 rounded-2xl bg-accent flex items-center justify-center text-3xl">📅</div>
+      <div className="w-7 h-7 rounded-full border-2 border-accent border-t-transparent animate-spin" />
+      <p className="text-sm text-muted">Loading your profile…</p>
+    </div>
+  )
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
     setLoading(true)
     try {
-      await signInWithEmailAndPassword(auth, email, password)
+      await setPersistence(auth, staySignedIn ? browserLocalPersistence : browserSessionPersistence)
+      const normalizedEmail = email.trim().toLowerCase()
+      await signInWithEmailAndPassword(auth, normalizedEmail, password)
       // useEffect above will navigate once auth state resolves
     } catch (err) {
       setError(err.message.replace('Firebase:', '').trim())
@@ -63,6 +108,9 @@ export default function LoginView() {
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 required
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck="false"
                 placeholder="admin@youngrembrandts.com"
                 className="w-full bg-raised border border-app rounded-lg px-3 py-2.5 text-sm text-primary placeholder:text-dim outline-none focus:border-accent transition-colors"
               />
@@ -82,13 +130,39 @@ export default function LoginView() {
               />
             </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="mt-2 w-full bg-accent hover:opacity-90 disabled:opacity-50 text-white font-semibold py-3 rounded-xl text-sm transition-opacity"
-            >
-              {loading ? 'Signing in…' : 'Sign in'}
-            </button>
+            {/* Stay signed in checkbox */}
+            <div className="flex items-center mb-2">
+              <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-muted select-none">
+                <input
+                  type="checkbox"
+                  checked={staySignedIn}
+                  onChange={e => setStaySignedIn(e.target.checked)}
+                  className="w-4 h-4 accent-accent rounded border-app bg-raised outline-none cursor-pointer"
+                />
+                Stay signed in
+              </label>
+            </div>
+
+            <div className="flex items-center gap-2 mt-2">
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex-1 bg-accent hover:opacity-90 disabled:opacity-50 text-white font-semibold py-3 rounded-xl text-sm transition-opacity"
+              >
+                {loading ? 'Signing in…' : 'Sign in'}
+              </button>
+              {bioSupported && bioEnabled && (
+                <button
+                  type="button"
+                  onClick={handleBiometricLogin}
+                  disabled={loading}
+                  title="Sign in with Face ID / fingerprint"
+                  className="w-12 h-12 flex items-center justify-center bg-raised border border-app hover:border-accent rounded-xl text-xl cursor-pointer disabled:opacity-50 transition-colors"
+                >
+                  🧬
+                </button>
+              )}
+            </div>
           </form>
         </div>
 

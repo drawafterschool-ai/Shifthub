@@ -9,10 +9,22 @@ const useNotificationsStore = create((set, get) => ({
   _unsub:        null,
 
   init() {
-    // Listen to ALL notifications that are either:
-    //   - forAdmin === true (shifts, people, buzz activity)
-    //   - OR have no forAdmin field (legacy / chat notifications)
-    // We fetch the 200 most recent and sort client-side.
+    // Clean up any existing subscription first to avoid leaks
+    get().cleanup()
+
+    const handleSnap = (snap) => {
+      const items = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      
+      // Safe sort that converts Timestamp objects or numbers into numbers
+      items.sort((a, b) => {
+        const aVal = a.createdAt?.seconds ? a.createdAt.seconds * 1000 : (Number(a.createdAt) || 0)
+        const bVal = b.createdAt?.seconds ? b.createdAt.seconds * 1000 : (Number(b.createdAt) || 0)
+        return bVal - aVal
+      })
+      
+      set({ notifications: items, loading: false })
+    }
+
     const q = query(
       collection(db, 'notifications'),
       where('forAdmin', '==', true),
@@ -20,27 +32,45 @@ const useNotificationsStore = create((set, get) => ({
       limit(200),
     )
 
-    const handleSnap = (snap) => {
-      const items = snap.docs
-        .map(d => ({ id: d.id, ...d.data() }))
-        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
-      set({ notifications: items, loading: false })
-    }
+    let fallbackUnsub = null
 
-    const unsub = onSnapshot(q, handleSnap, () => {
-      // Fallback without orderBy (index not ready yet)
+    const unsub = onSnapshot(q, handleSnap, (error) => {
+      console.error('Primary notifications query failed, trying fallback:', error)
+      
       const q2 = query(
         collection(db, 'notifications'),
         where('forAdmin', '==', true),
         limit(200),
       )
-      onSnapshot(q2, handleSnap)
+
+      fallbackUnsub = onSnapshot(q2, handleSnap, (err2) => {
+        console.error('Fallback notifications query also failed:', err2)
+        set({ loading: false })
+      })
+
+      // Store the fallback unsubscribe function
+      set({ _unsub: () => {
+        if (fallbackUnsub) {
+          fallbackUnsub()
+        }
+      }})
     })
 
-    set({ _unsub: unsub })
+    // If the error callback didn't fire synchronously, store the primary unsubscriber
+    if (!fallbackUnsub) {
+      set({ _unsub: () => {
+        unsub()
+        if (fallbackUnsub) {
+          fallbackUnsub()
+        }
+      }})
+    }
   },
 
-  cleanup() { get()._unsub?.() },
+  cleanup() {
+    get()._unsub?.()
+    set({ _unsub: null, loading: true })
+  },
 
   get unreadCount() {
     return get().notifications.filter(n => n.status === 'unread').length

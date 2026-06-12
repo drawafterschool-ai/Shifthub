@@ -14,13 +14,31 @@ const RSVP_OPTIONS = [
 function fmtDate(dateStr, timeStr) {
   if (!dateStr) return ''
   const d    = new Date(dateStr + 'T12:00:00')
+  if (isNaN(d.getTime())) return ''
   const date = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
   if (timeStr) {
-    // Convert HH:MM to 12h format
-    const [h, m] = timeStr.split(':').map(Number)
-    const period = h >= 12 ? 'PM' : 'AM'
-    const h12    = ((h % 12) || 12)
-    return `${date} at ${h12}:${String(m).padStart(2,'0')} ${period}`
+    if (timeStr.includes('-') || timeStr.includes('–')) {
+      const parts = timeStr.split(/[-–]/).map(p => p.trim())
+      const formattedParts = parts.map(part => {
+        if (!part.includes(':')) return part
+        const [h, m] = part.split(':').map(Number)
+        if (isNaN(h) || isNaN(m)) return part
+        const period = h >= 12 ? 'PM' : 'AM'
+        const h12    = ((h % 12) || 12)
+        return `${h12}:${String(m).padStart(2,'0')} ${period}`
+      })
+      return `${date} at ${formattedParts.join(' – ')}`
+    }
+    
+    if (timeStr.includes(':')) {
+      const [h, m] = timeStr.split(':').map(Number)
+      if (!isNaN(h) && !isNaN(m)) {
+        const period = h >= 12 ? 'PM' : 'AM'
+        const h12    = ((h % 12) || 12)
+        return `${date} at ${h12}:${String(m).padStart(2,'0')} ${period}`
+      }
+    }
+    return `${date} at ${timeStr}`
   }
   return date
 }
@@ -28,6 +46,7 @@ function fmtDate(dateStr, timeStr) {
 function daysUntil(dateStr) {
   const today = new Date(); today.setHours(0,0,0,0)
   const d     = new Date(dateStr + 'T12:00:00')
+  if (isNaN(d.getTime())) return null
   const diff  = Math.round((d - today) / 86400000)
   if (diff < 0)  return null
   if (diff === 0) return 'Today'

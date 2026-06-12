@@ -18,17 +18,60 @@ const useScheduleStore = create((set, get) => ({
   _unsubs:        [],
 
   init() {
+    // Load from cache if exists
+    try {
+      const cachedShifts = localStorage.getItem('shifthub_rawShifts')
+      const cachedJobs = localStorage.getItem('shifthub_jobs')
+      const cachedTemplates = localStorage.getItem('shifthub_savedTemplates')
+      
+      const updateObj = {}
+      let hasCachedData = false
+      if (cachedShifts) {
+        const shifts = JSON.parse(cachedShifts)
+        updateObj.rawShifts = shifts
+        updateObj.schedule = groupShifts(shifts)
+        hasCachedData = true
+      }
+      if (cachedJobs) {
+        updateObj.jobs = JSON.parse(cachedJobs)
+      }
+      if (cachedTemplates) {
+        updateObj.savedTemplates = JSON.parse(cachedTemplates)
+      }
+      if (hasCachedData) {
+        updateObj.loading = false
+      }
+      if (Object.keys(updateObj).length > 0) {
+        set(updateObj)
+      }
+    } catch (e) {
+      console.warn('Error loading cached schedule settings:', e)
+    }
+
     // Listen to shifts
     const unsubShifts = onSnapshot(collection(db, 'shifts'), (snap) => {
       const shifts = snap.docs.map(d => ({ id: d.id, ...d.data() }))
       set({ rawShifts: shifts, schedule: groupShifts(shifts), loading: false })
+      try {
+        localStorage.setItem('shifthub_rawShifts', JSON.stringify(shifts))
+      } catch (e) {
+        console.warn('Error saving shifts to cache:', e)
+      }
     })
 
     // Listen to company settings (jobs + templates)
     const unsubSettings = onSnapshot(doc(db, 'settings', 'company'), (snap) => {
       if (snap.exists()) {
         const d = snap.data()
-        set({ jobs: d.jobs || [], savedTemplates: d.templates || [] })
+        const jobs = d.jobs || []
+        const templates = d.templates || []
+        set({ jobs, savedTemplates: templates })
+        try {
+          localStorage.setItem('shifthub_jobs', JSON.stringify(jobs))
+          localStorage.setItem('shifthub_savedTemplates', JSON.stringify(templates))
+        } catch (e) {
+          console.warn('Error saving company settings to cache:', e)
+        }
       }
     })
 

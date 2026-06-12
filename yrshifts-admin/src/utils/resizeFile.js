@@ -3,7 +3,7 @@
 // Videos: validated max 5MB (browser can't transcode video)
 
 export async function resizeFile(file) {
-  const IMAGE_MAX = 2 * 1024 * 1024  // 2 MB
+  const IMAGE_MAX = 1.5 * 1024 * 1024  // 1.5 MB
   const VIDEO_MAX = 5 * 1024 * 1024  // 5 MB
 
   // Video — just enforce size limit
@@ -39,7 +39,7 @@ export async function resizeFile(file) {
         const ctx = canvas.getContext('2d')
         ctx.drawImage(img, 0, 0, width, height)
 
-        // Try reducing quality until under 2 MB
+        // Try reducing quality until under 1.5 MB
         let quality = 0.85
         const tryBlob = () => {
           canvas.toBlob(blob => {

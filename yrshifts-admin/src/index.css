@@ -5,12 +5,12 @@
 /* ── Design tokens ─────────────────────────────────────────────────── */
 :root {
   /* Dark theme (default) */
-  --bg:          #0F1117;
-  --surface:     #181B25;
-  --card:        #1C2030;
-  --raised:      #232838;
-  --border:      #2A2F40;
-  --border-lt:   #323848;
+  --bg:          radial-gradient(circle at 15% 15%, #192239 0%, #0f1117 100%) no-repeat fixed;
+  --surface:     rgba(24, 27, 37, 0.6);
+  --card:        rgba(28, 32, 48, 0.45);
+  --raised:      rgba(35, 40, 56, 0.7);
+  --border:      rgba(255, 255, 255, 0.06);
+  --border-lt:   rgba(255, 255, 255, 0.08);
   --text:        #E8ECF4;
   --muted:       #8B92A8;
   --dim:         #5C6380;
@@ -29,12 +29,12 @@
 }
 
 .light {
-  --bg:          #F7F8FA;
-  --surface:     #FFFFFF;
-  --card:        #FFFFFF;
-  --raised:      #F3F4F6;
-  --border:      #E5E7EB;
-  --border-lt:   #F0F1F3;
+  --bg:          radial-gradient(circle at 15% 15%, #e2e8f0 0%, #f7f8fa 100%) no-repeat fixed;
+  --surface:     rgba(255, 255, 255, 0.6);
+  --card:        rgba(255, 255, 255, 0.45);
+  --raised:      rgba(243, 244, 246, 0.7);
+  --border:      rgba(0, 0, 0, 0.06);
+  --border-lt:   rgba(0, 0, 0, 0.08);
   --text:        #111827;
   --muted:       #6B7280;
   --dim:         #9CA3AF;
@@ -56,7 +56,7 @@
 * { box-sizing: border-box; }
 
 html, body, #root {
-  height: 100%;
+  height: 100vh;
   margin: 0;
   overflow: hidden;
   background: var(--bg);
@@ -72,8 +72,8 @@ html, body, #root {
 /* ── Utility shortcuts ─────────────────────────────────────────────── */
 @layer utilities {
   .bg-app        { background: var(--bg); }
-  .bg-surface    { background: var(--surface); }
-  .bg-card       { background: var(--card); }
+  .bg-surface    { background: var(--surface); backdrop-filter: blur(12px) saturate(120%); -webkit-backdrop-filter: blur(12px) saturate(120%); }
+  .bg-card       { background: var(--card); backdrop-filter: blur(8px) saturate(110%); -webkit-backdrop-filter: blur(8px) saturate(110%); }
   .bg-raised     { background: var(--raised); }
   .border-app    { border-color: var(--border); }
   .text-primary  { color: var(--text); }

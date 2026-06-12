@@ -18,6 +18,23 @@ const useSettingsStore = create((set, get) => ({
   _unsub:       null,
 
   init() {
+    try {
+      const cached = localStorage.getItem('shifthub_settings')
+      if (cached) {
+        const d = JSON.parse(cached)
+        set({
+          companyName:  d.companyName  || '',
+          timezone:     d.timezone     || 'America/Chicago',
+          payrollTiers: d.payrollTiers?.length ? d.payrollTiers : DEFAULT_TIERS,
+          smsTemplates: d.smsTemplates || {},
+          raw:          d,
+          loading:      false,
+        })
+      }
+    } catch (e) {
+      console.warn('Error loading cached settings:', e)
+    }
+
     const unsub = onSnapshot(doc(db, 'settings', 'company'), (snap) => {
       if (snap.exists()) {
         const d = snap.data()
@@ -29,6 +46,11 @@ const useSettingsStore = create((set, get) => ({
           raw:          d,
           loading:      false,
         })
+        try {
+          localStorage.setItem('shifthub_settings', JSON.stringify(d))
+        } catch (e) {
+          console.warn('Error saving settings to cache:', e)
+        }
       } else {
         set({ loading: false })
       }

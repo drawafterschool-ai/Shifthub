@@ -15,7 +15,7 @@ function NoteModal({ title, subtitle, placeholder, confirmLabel, confirmCls, onC
   }
 
   return (
-    <div className="fixed inset-0 z-[1000] flex items-end justify-center bg-black/60 px-4 pb-8"
+    <div className="absolute inset-0 z-[1000] flex items-end justify-center bg-black/60 px-4 pb-8"
       onClick={onCancel}>
       <div className="w-full max-w-md bg-surface rounded-3xl overflow-hidden animate-slide-up"
         onClick={e => e.stopPropagation()}>

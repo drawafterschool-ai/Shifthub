@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
 
 import useAuthStore          from './stores/useAuthStore'
@@ -7,6 +7,7 @@ import useDirectoryStore     from './stores/useDirectoryStore'
 import useNotificationsStore from './stores/useNotificationsStore'
 import useSettingsStore      from './stores/useSettingsStore'
 import useChatStore          from './stores/useChatStore'
+import useFormsStore         from './stores/useFormsStore'
 
 import AdminLayout  from './layout/AdminLayout'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -24,6 +25,8 @@ const WeeklyBuzzView    = lazy(() => import('./views/templates/WeeklyBuzzView'))
 const EventsView        = lazy(() => import('./views/templates/EventsView'))
 const NotificationsView = lazy(() => import('./views/notifications/NotificationsView'))
 const SettingsView      = lazy(() => import('./views/settings/SettingsView'))
+const ReportingView     = lazy(() => import('./views/reporting/ReportingView'))
+const FormsView         = lazy(() => import('./views/forms/FormsView'))
 
 // ── Auth guard ────────────────────────────────────────────────────────────────
 function RequireAdmin() {
@@ -70,15 +73,19 @@ function RequireAdmin() {
 
 // ── Store initialiser ─────────────────────────────────────────────────────────
 function StoreInit() {
-  const user = useAuthStore(s => s.user)
+  const { user, userProfile } = useAuthStore()
 
   useEffect(() => {
-    if (!user) return
+    if (!user || !userProfile) return
+    const role = userProfile.role
+    if (!['owner', 'admin', 'manager'].includes(role)) return
+
     useScheduleStore.getState().init()
     useDirectoryStore.getState().init()
     useNotificationsStore.getState().init()
     useSettingsStore.getState().init()
     useChatStore.getState().init()
+    useFormsStore.getState().init()
 
     return () => {
       useScheduleStore.getState().cleanup()
@@ -86,18 +93,40 @@ function StoreInit() {
       useNotificationsStore.getState().cleanup()
       useSettingsStore.getState().cleanup()
       useChatStore.getState().cleanup()
+      useFormsStore.getState().cleanup()
     }
-  }, [user])
+  }, [user, userProfile])
 
   return null
 }
 
 // ── App ───────────────────────────────────────────────────────────────────────
 export default function App() {
-  useEffect(() => { useAuthStore.getState().init() }, [])
+  const [isOffline, setIsOffline] = useState(!navigator.onLine)
+  useEffect(() => {
+    useAuthStore.getState().init()
+    sessionStorage.removeItem('shifthub_admin_chunk_reload')
+  }, [])
+
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false)
+    const handleOffline = () => setIsOffline(true)
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
 
   return (
     <BrowserRouter basename="/admin">
+      {isOffline && (
+        <div className="fixed top-0 left-0 right-0 bg-amber-600 dark:bg-amber-700 text-white text-center py-1.5 text-xs font-semibold tracking-wide shadow-md z-[99999] flex items-center justify-center gap-1.5 transition-all duration-300">
+          <span>📴</span>
+          <span>Offline Mode — Viewing Cached Data</span>
+        </div>
+      )}
       <StoreInit />
       <Routes>
         <Route path="/login" element={<LoginView />} />
@@ -130,6 +159,12 @@ export default function App() {
             }/>
             <Route path="settings" element={
               <ErrorBoundary><Suspense fallback={<ViewLoader />}><SettingsView /></Suspense></ErrorBoundary>
+            }/>
+            <Route path="reporting" element={
+              <ErrorBoundary><Suspense fallback={<ViewLoader />}><ReportingView /></Suspense></ErrorBoundary>
+            }/>
+            <Route path="forms" element={
+              <ErrorBoundary><Suspense fallback={<ViewLoader />}><FormsView /></Suspense></ErrorBoundary>
             }/>
           </Route>
         </Route>

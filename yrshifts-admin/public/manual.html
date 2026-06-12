@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ShiftHub — Onboarding & User Manual</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            display: ['Outfit', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              dark: '#090d16',
+              card: '#111827',
+              accent: '#6366f1',
+              accentLight: '#818cf8',
+              teal: '#14b8a6',
+              pink: '#ec4899',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #090d16;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1f2937;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #4b5563;
+    }
+    /* Dynamic Animations */
+    .glow-hover:hover {
+      box-shadow: 0 0 25px rgba(99, 102, 241, 0.25);
+      border-color: rgba(99, 102, 241, 0.4);
+    }
+    .pulse-glow {
+      animation: pulseGlow 3s infinite alternate;
+    }
+    @keyframes pulseGlow {
+      0% {
+        box-shadow: 0 0 15px rgba(99, 102, 241, 0.15);
+      }
+      100% {
+        box-shadow: 0 0 30px rgba(99, 102, 241, 0.35);
+      }
+    }
+  </style>
+</head>
+<body class="bg-brand-dark text-gray-200 font-sans min-h-screen selection:bg-brand-accent selection:text-white antialiased">
+
+  <!-- Header Banner -->
+  <header class="relative overflow-hidden py-16 border-b border-gray-800/80 bg-gradient-to-b from-indigo-950/20 to-transparent">
+    <!-- Glowing background circles -->
+    <div class="absolute -top-40 -left-40 w-96 h-96 bg-brand-accent/10 rounded-full blur-[100px]"></div>
+    <div class="absolute -top-40 -right-40 w-96 h-96 bg-brand-teal/10 rounded-full blur-[100px]"></div>
+
+    <div class="max-w-4xl mx-auto px-6 text-center relative z-10">
+      <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-brand-accent/20 text-brand-accentLight text-xs font-semibold uppercase tracking-wider mb-6">
+        🚀 ShiftHub Dashboard Handbook
+      </div>
+      <h1 class="text-4xl md:text-5xl font-extrabold font-display text-white tracking-tight mb-4">
+        ShiftHub Admin <span class="bg-gradient-to-r from-brand-accentLight via-brand-pink to-brand-teal bg-clip-text text-transparent">Manual</span>
+      </h1>
+      <p class="text-gray-400 text-base md:text-lg max-w-2xl mx-auto leading-relaxed">
+        Welcome to the ShiftHub administration suite. This manual provides detailed instructions on setting up your franchise settings, managing schedules, onboarding teachers, customizing communications, dispatching forms, and utilizing alerts.
+      </p>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="max-w-4xl mx-auto px-6 py-12">
+    
+    <!-- Quick Nav -->
+    <nav class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mb-12">
+      <a href="#setup" class="flex flex-col items-center justify-center p-4 bg-brand-card hover:bg-gray-800/50 border border-gray-800 rounded-2xl text-center transition-all glow-hover group">
+        <span class="text-2xl mb-1 group-hover:scale-110 transition-transform">⚙️</span>
+        <span class="text-xs font-bold text-gray-400 group-hover:text-white">1. Franchise Setup</span>
+      </a>
+      <a href="#scheduling" class="flex flex-col items-center justify-center p-4 bg-brand-card hover:bg-gray-800/50 border border-gray-800 rounded-2xl text-center transition-all glow-hover group">
+        <span class="text-2xl mb-1 group-hover:scale-110 transition-transform">📅</span>
+        <span class="text-xs font-bold text-gray-400 group-hover:text-white">2. Shift Scheduling</span>
+      </a>
+      <a href="#import" class="flex flex-col items-center justify-center p-4 bg-brand-card hover:bg-gray-800/50 border border-gray-800 rounded-2xl text-center transition-all glow-hover group">
+        <span class="text-2xl mb-1 group-hover:scale-110 transition-transform">📊</span>
+        <span class="text-xs font-bold text-gray-400 group-hover:text-white">3. Connecteam CSV</span>
+      </a>
+      <a href="#teachers" class="flex flex-col items-center justify-center p-4 bg-brand-card hover:bg-gray-800/50 border border-gray-800 rounded-2xl text-center transition-all glow-hover group">
+        <span class="text-2xl mb-1 group-hover:scale-110 transition-transform">📇</span>
+        <span class="text-xs font-bold text-gray-400 group-hover:text-white">4. Team Directory</span>
+      </a>
+      <a href="#chat" class="flex flex-col items-center justify-center p-4 bg-brand-card hover:bg-gray-800/50 border border-gray-800 rounded-2xl text-center transition-all glow-hover group">
+        <span class="text-2xl mb-1 group-hover:scale-110 transition-transform">💬</span>
+        <span class="text-xs font-bold text-gray-400 group-hover:text-white">5. Chat & Groups</span>
+      </a>
+      <a href="#forms" class="flex flex-col items-center justify-center p-4 bg-brand-card hover:bg-gray-800/50 border border-gray-800 rounded-2xl text-center transition-all glow-hover group">
+        <span class="text-2xl mb-1 group-hover:scale-110 transition-transform">📝</span>
+        <span class="text-xs font-bold text-gray-400 group-hover:text-white">6. Forms Center</span>
+      </a>
+      <a href="#buzz" class="flex flex-col items-center justify-center p-4 bg-brand-card hover:bg-gray-800/50 border border-gray-800 rounded-2xl text-center transition-all glow-hover group">
+        <span class="text-2xl mb-1 group-hover:scale-110 transition-transform">📢</span>
+        <span class="text-xs font-bold text-gray-400 group-hover:text-white">7. Weekly Buzz</span>
+      </a>
+      <a href="#pwa-notifications" class="flex flex-col items-center justify-center p-4 bg-brand-card hover:bg-gray-800/50 border border-gray-800 rounded-2xl text-center transition-all glow-hover group">
+        <span class="text-2xl mb-1 group-hover:scale-110 transition-transform">🔔</span>
+        <span class="text-xs font-bold text-gray-400 group-hover:text-white">8. Alerts & PWA</span>
+      </a>
+    </nav>
+
+    <!-- Content Sections -->
+    <div class="space-y-12">
+      
+      <!-- Section 1: Initial Setup -->
+      <section id="setup" class="scroll-mt-6 bg-brand-card border border-gray-800/80 rounded-3xl p-6 md:p-8 transition-all relative overflow-hidden">
+        <div class="absolute top-0 right-0 w-24 h-24 bg-brand-accent/5 rounded-full blur-2xl"></div>
+        <div class="flex items-start gap-4 mb-6">
+          <div class="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-brand-accent/20 flex items-center justify-center text-2xl flex-shrink-0">⚙️</div>
+          <div>
+            <h2 class="text-xl md:text-2xl font-bold font-display text-white">1. Initial Setup & Settings</h2>
+            <p class="text-xs text-gray-400 mt-1">Configure your franchise profile and business rules</p>
+          </div>
+        </div>
+        <div class="space-y-4 text-gray-300 text-sm leading-relaxed">
+          <p>
+            Before scheduling classes, navigate to the <strong>Settings (⚙️)</strong> page in the left sidebar (desktop) or bottom tab bar (mobile) to populate your business rules:
+          </p>
+          <ul class="list-disc pl-5 space-y-2">
+            <li><strong>Company Name</strong>: Customize your franchise name. This handles styling in outgoing emails, SMS messages, and PWA display headers.</li>
+            <li><strong>Job / Session Types</strong>: Add custom types representing your classes (e.g. <em>Teach</em>, <em>Assist</em>, <em>Workshop</em>). Bind a default pay rate and a select theme color to each, color-coding the schedule automatically.</li>
+            <li><strong>Payroll Hourly Tiers</strong>: Establish tier multipliers for teacher classifications. Pay summaries use these variables to calculate monthly payroll estimations.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- Section 2: Scheduling Shifts -->
+      <section id="scheduling" class="scroll-mt-6 bg-brand-card border border-gray-800/80 rounded-3xl p-6 md:p-8 transition-all relative overflow-hidden">
+        <div class="absolute top-0 right-0 w-24 h-24 bg-brand-pink/5 rounded-full blur-2xl"></div>
+        <div class="flex items-start gap-4 mb-6">
+          <div class="w-12 h-12 rounded-2xl bg-pink-500/10 border border-brand-pink/20 flex items-center justify-center text-2xl flex-shrink-0">📅</div>
+          <div>
+            <h2 class="text-xl md:text-2xl font-bold font-display text-white">2. Creating & Managing Schedules</h2>
+            <p class="text-xs text-gray-400 mt-1">Build schedule grids, repeat series, and set open claimable shifts</p>
+          </div>
+        </div>
+        <div class="space-y-4 text-gray-300 text-sm leading-relaxed">
+          <p>
+            The **Schedule** view features a month-by-month and week-by-week row layout designed for drag-free slot creation:
+          </p>
+          <ul class="list-disc pl-5 space-y-2">
+            <li><strong>Auto-Populate Instructor</strong>: In the weekly grid view, click the plus (`+`) button on any instructor's row. The shift editor opens with that instructor pre-selected.</li>
+            <li><strong>Recurring Shifts</strong>: Check "Repeat this shift" to duplicate assignments weekly. These are linked via a shared `seriesId` in Firestore, allowing you to edit or delete the entire sequence in bulk.</li>
+            <li><strong>⚡ Open Shifts (Claimable)</strong>: Save a shift with the instructor set as *Unassigned*. It will appear on the Teacher PWA under "Open Shifts", allowing instructors to claim it. The administrator is notified to confirm or reject their claim.</li>
+            <li><strong>Conflict Checks</strong>: The builder warns you if you assign a teacher to overlapping shifts. The conflict checking system ignores sibling shifts in the same recurrence series to prevent false-positives.</li>
+            <li><strong>Confirmation Reset Rules</strong>: If you change the **date** or **time** on a shift previously confirmed by a teacher, its status resets to **Pending**, requiring the teacher to re-confirm. Changing minor details keeps it confirmed but notifies the teacher.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- Section 3: Connecteam CSV Importer -->
+      <section id="import" class="scroll-mt-6 bg-brand-card border border-gray-800/80 rounded-3xl p-6 md:p-8 transition-all relative overflow-hidden">
+        <div class="absolute top-0 right-0 w-24 h-24 bg-brand-teal/5 rounded-full blur-2xl"></div>
+        <div class="flex items-start gap-4 mb-6">
+          <div class="w-12 h-12 rounded-2xl bg-teal-500/10 border border-brand-teal/20 flex items-center justify-center text-2xl flex-shrink-0">📊</div>
+          <div>
+            <h2 class="text-xl md:text-2xl font-bold font-display text-white">3. Connecteam Schedule CSV Importer</h2>
+            <p class="text-xs text-gray-400 mt-1">Import hundreds of shifts in a single upload</p>
+          </div>
+        </div>
+        <div class="space-y-4 text-gray-300 text-sm leading-relaxed">
+          <p>
+            Click the **Import** button on the Schedule toolbar. You can drop a spreadsheet directly into the drag-and-drop zone:
+          </p>
+          <div class="border border-gray-800 bg-brand-dark/60 rounded-2xl p-5 space-y-3">
+            <h4 class="font-semibold text-white flex items-center gap-2">
+              <span class="text-xs bg-brand-teal/15 text-brand-teal px-2 py-0.5 rounded-md">Header Format</span>
+              CSV Columns
+            </h4>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs font-mono font-bold text-gray-300">
+              <div class="bg-brand-card border border-gray-850 py-1.5 rounded-lg">Date</div>
+              <div class="bg-brand-card border border-gray-850 py-1.5 rounded-lg">Start</div>
+              <div class="bg-brand-card border border-gray-850 py-1.5 rounded-lg">End</div>
+              <div class="bg-brand-card border border-gray-850 py-1.5 rounded-lg">Shift title</div>
+              <div class="bg-brand-card border border-gray-850 py-1.5 rounded-lg">Job</div>
+              <div class="bg-brand-card border border-gray-850 py-1.5 rounded-lg">Users</div>
+              <div class="bg-brand-card border border-gray-850 py-1.5 rounded-lg">Address</div>
+              <div class="bg-brand-card border border-gray-850 py-1.5 rounded-lg">Note</div>
+            </div>
+          </div>
+          <p>
+            The importer normalizes dates, matches teacher names case-insensitively, and maps jobs to company settings.
+            If a name in the *Users* column is not in your directory, it stages the teacher's profile for auto-creation. If a *Job* is unrecognized, it auto-registers it in your settings.
+          </p>
+        </div>
+      </section>
+
+      <!-- Section 4: Team Directory -->
+      <section id="teachers" class="scroll-mt-6 bg-brand-card border border-gray-800/80 rounded-3xl p-6 md:p-8 transition-all relative overflow-hidden">
+        <div class="absolute top-0 right-0 w-24 h-24 bg-brand-accent/5 rounded-full blur-2xl"></div>
+        <div class="flex items-start gap-4 mb-6">
+          <div class="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-brand-accent/20 flex items-center justify-center text-2xl flex-shrink-0">📇</div>
+          <div>
+            <h2 class="text-xl md:text-2xl font-bold font-display text-white">4. Team Directory & Onboarding</h2>
+            <p class="text-xs text-gray-400 mt-1">Manage teacher profiles and send secure invitation links</p>
+          </div>
+        </div>
+        <div class="space-y-4 text-gray-300 text-sm leading-relaxed">
+          <p>
+            The **Directory** handles teacher files, contact coordinates, hourly tiers, and onboarding state:
+          </p>
+          <ul class="list-disc pl-5 space-y-2">
+            <li><strong>Invitation Flow</strong>: Invite a new teacher by providing their email, phone, and hourly tier. ShiftHub creates their profile and generates a secure <strong>72-hour password reset token link</strong>, which is emailed to them automatically.</li>
+            <li><strong>First-Login Monitoring</strong>: On their first login, the PWA flags their onboarding state. Schedulers receive a push notification, and the Notifications page displays a "🎉 First Login" log with a quick "View profile" link.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- Section 5: Chat & Groups -->
+      <section id="chat" class="scroll-mt-6 bg-brand-card border border-gray-800/80 rounded-3xl p-6 md:p-8 transition-all relative overflow-hidden">
+        <div class="absolute top-0 right-0 w-24 h-24 bg-brand-pink/5 rounded-full blur-2xl"></div>
+        <div class="flex items-start gap-4 mb-6">
+          <div class="w-12 h-12 rounded-2xl bg-pink-500/10 border border-brand-pink/20 flex items-center justify-center text-2xl flex-shrink-0">💬</div>
+          <div>
+            <h2 class="text-xl md:text-2xl font-bold font-display text-white">5. Chat Workspace & Group Customization</h2>
+            <p class="text-xs text-gray-400 mt-1">Coordinate in real-time and customize group channels</p>
+          </div>
+        </div>
+        <div class="space-y-4 text-gray-300 text-sm leading-relaxed">
+          <p>
+            The **Chat** view has been upgraded with a scaled-up, mobile-responsive layout for quick group coordinate setups:
+          </p>
+          <ul class="list-disc pl-5 space-y-2">
+            <li><strong>Group Avatars & Customizer</strong>: When creating a group chat via "New group message", you can select an emoji icon, choose a background color theme (8 choices), or upload a custom group image. Previews update in real-time.</li>
+            <li><strong>Deep-Linked Welcome Alerts</strong>: New groups automatically write a system welcome message. This triggers a push notification to all members. Clicking the push notification opens the app and navigates directly to the target thread.</li>
+            <li><strong>User Profile Avatars</strong>: Chat headers and message lists display user-uploaded profile pictures instead of basic letters.</li>
+            <li><strong>Last Active Indicators</strong>: Direct message headers show the recipient's real-time last login timestamp (e.g. <em>Last login: Yesterday at 4:12 PM</em>) to check if your message has been received.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- Section 6: Forms Center -->
+      <section id="forms" class="scroll-mt-6 bg-brand-card border border-gray-800/80 rounded-3xl p-6 md:p-8 transition-all relative overflow-hidden">
+        <div class="absolute top-0 right-0 w-24 h-24 bg-brand-teal/5 rounded-full blur-2xl"></div>
+        <div class="flex items-start gap-4 mb-6">
+          <div class="w-12 h-12 rounded-2xl bg-teal-500/10 border border-brand-teal/20 flex items-center justify-center text-2xl flex-shrink-0">📝</div>
+          <div>
+            <h2 class="text-xl md:text-2xl font-bold font-display text-white">6. Forms Center & Survey Dispatcher</h2>
+            <p class="text-xs text-gray-400 mt-1">Design form questionnaires and dispatch copies to teachers</p>
+          </div>
+        </div>
+        <div class="space-y-4 text-gray-300 text-sm leading-relaxed">
+          <p>
+            The **Forms** tab is a digital questionnaire hub that allows admins to build and manage custom forms:
+          </p>
+          <ul class="list-disc pl-5 space-y-2">
+            <li><strong>Form Builder</strong>: Compile forms with rich descriptions. Add single-line text inputs, textareas, dropdown selects, and checkboxes. Drag and drop field cards to re-order them.</li>
+            <li><strong>Group Dispatch Checklist</strong>: Tap "Dispatch" on a template. A slide-up drawer allows you to select specific teachers, search by name, or click "Select All" to dispatch custom form copies in bulk.</li>
+            <li><strong>Response Protection</strong>: The fields are snapshotted in the dispatch record, ensuring teacher responses remain unaffected if you edit the main template later.</li>
+            <li><strong>Tracking Table & Viewer</strong>: View dispatched sheets, track progress (<em>Pending</em> in amber vs. <em>Completed</em> in green), and click any row to open the submitted answers in a structured modal reader.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- Section 7: Weekly Buzz -->
+      <section id="buzz" class="scroll-mt-6 bg-brand-card border border-gray-800/80 rounded-3xl p-6 md:p-8 transition-all relative overflow-hidden">
+        <div class="absolute top-0 right-0 w-24 h-24 bg-brand-accent/5 rounded-full blur-2xl"></div>
+        <div class="flex items-start gap-4 mb-6">
+          <div class="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-brand-accent/20 flex items-center justify-center text-2xl flex-shrink-0">📢</div>
+          <div>
+            <h2 class="text-xl md:text-2xl font-bold font-display text-white">7. Weekly Buzz announcements</h2>
+            <p class="text-xs text-gray-400 mt-1">Publish team newsletters and track readership logs</p>
+          </div>
+        </div>
+        <div class="space-y-4 text-gray-300 text-sm leading-relaxed">
+          <p>
+            The **Weekly Buzz** view is an internal announcements feed:
+          </p>
+          <ul class="list-disc pl-5 space-y-2">
+            <li><strong>Rich Formatting</strong>: Use the inline editor to format announcements with headers, bullet points, bold text, and clickable links.</li>
+            <li><strong>Custom Card Backdrops</strong>: Select background skins (e.g. Clouds, Snow, radial colors) to customize the post container.</li>
+            <li><strong>Readership Logs</strong>: Track the readership with a progress bar (e.g., <em>Seen by 6 / 10</em>). Click "Show all" to see a roster showing which teachers have viewed the post.</li>
+            <li><strong>Social Reactions</strong>: View likes and comment threads left by instructors at the bottom of the card.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- Section 8: Alerts & PWA -->
+      <section id="pwa-notifications" class="scroll-mt-6 bg-brand-card border border-gray-800/80 rounded-3xl p-6 md:p-8 transition-all relative overflow-hidden">
+        <div class="absolute top-0 right-0 w-24 h-24 bg-brand-teal/5 rounded-full blur-2xl"></div>
+        <div class="flex items-start gap-4 mb-6">
+          <div class="w-12 h-12 rounded-2xl bg-teal-500/10 border border-brand-teal/20 flex items-center justify-center text-2xl flex-shrink-0">🔔</div>
+          <div>
+            <h2 class="text-xl md:text-2xl font-bold font-display text-white">8. Push Alerts & Mobile PWA Setup</h2>
+            <p class="text-xs text-gray-400 mt-1">Stay updated with push notifications and install the app on your phone</p>
+          </div>
+        </div>
+        <div class="space-y-4 text-gray-300 text-sm leading-relaxed">
+          <p>
+            ShiftHub uses Web Push notifications to deliver native lock-screen alerts. 
+            Because notification permissions are device-specific, you must register each device:
+          </p>
+          <div class="grid md:grid-cols-2 gap-4">
+            <!-- PWA Setup -->
+            <div class="bg-brand-dark/50 border border-gray-850 rounded-2xl p-4">
+              <h4 class="font-bold text-white mb-2 flex items-center gap-2 text-xs">
+                <span class="text-brand-accent">📲</span> 1. Install PWA on Phone
+              </h4>
+              <p class="text-xs text-gray-400 leading-relaxed">
+                Open your admin URL (`/admin`) on your mobile browser.
+                <br>• <strong>iOS Safari</strong>: Tap the Share button (📤) &rarr; "Add to Home Screen".
+                <br>• <strong>Android Chrome</strong>: Tap Menu (⋮) &rarr; "Install App".
+                <br>Open the app from your home screen.
+              </p>
+            </div>
+            <!-- Notifications Setup -->
+            <div class="bg-brand-dark/50 border border-gray-850 rounded-2xl p-4">
+              <h4 class="font-bold text-white mb-2 flex items-center gap-2 text-xs">
+                <span class="text-brand-teal">🔔</span> 2. Enable Notifications
+              </h4>
+              <p class="text-xs text-gray-400 leading-relaxed">
+                Look for the status bell icon in the top-right header:
+                <br>• `🔕` (Gray): Blocked/inactive. Tap it to open the setup banner.
+                <br>• `🔔` (Green): Active.
+                <br>• `📲` (Gray): Standalone mode required (iOS Safari).
+                <br>Tap **Enable** to grant permission.
+              </p>
+            </div>
+          </div>
+          <p class="text-xs text-gray-400">
+            * Pulsing red `"NEW"` badges appear on navigation items in both the admin sidebar and teacher toolbar when new updates, resource nodes, or unconfirmed shifts require attention.
+          </p>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- Call to Action Block -->
+    <section class="mt-16 bg-gradient-to-br from-indigo-900/40 via-brand-card to-teal-950/30 border border-brand-accent/30 rounded-3xl p-8 text-center relative overflow-hidden pulse-glow">
+      <!-- Glow filters -->
+      <div class="absolute -bottom-20 -left-20 w-48 h-48 bg-brand-accent/20 rounded-full blur-[60px]"></div>
+      <div class="absolute -bottom-20 -right-20 w-48 h-48 bg-brand-teal/20 rounded-full blur-[60px]"></div>
+
+      <span class="text-4xl mb-4 inline-block animate-bounce">💬</span>
+      <h3 class="text-2xl font-extrabold font-display text-white mb-2">Trial Period & Pricing</h3>
+      <p class="text-gray-400 text-sm max-w-lg mx-auto leading-relaxed mb-6">
+        We hope you enjoy scheduling your classes and empowering your instructors with ShiftHub. If you have any questions or need custom adjustments during your trial, feel free to reach out.
+      </p>
+      
+      <div class="inline-block bg-brand-dark border border-gray-800 rounded-2xl px-6 py-4">
+        <p class="text-xs text-gray-400 uppercase font-bold tracking-wider mb-1">Need to purchase or extend?</p>
+        <a href="mailto:giordanofontana@gmail.com" class="text-lg md:text-xl font-extrabold text-brand-accentLight hover:text-brand-teal transition-colors">
+          Contact <span class="underline">giordanofontana@gmail.com</span> for pricing after trial
+        </a>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="text-center py-12 text-xs text-gray-500 border-t border-gray-900/60 mt-12 bg-brand-dark/20">
+    <p>&copy; 2026 ShiftHub. Premium Scheduling Suite for Young Rembrandts.</p>
+  </footer>
+
+</body>
+</html>

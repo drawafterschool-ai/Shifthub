@@ -2,11 +2,15 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import useAuthStore    from './stores/useAuthStore'
 import useTeacherStore from './stores/useTeacherStore'
 import useChatStore    from './stores/useChatStore'
+import useFormsStore   from './stores/useFormsStore'
 
 import LoginView    from './views/LoginView'
 import ErrorBoundary from './components/ErrorBoundary'
 import ViewLoader    from './components/ViewLoader'
 import InstallBanner from './components/InstallBanner'
+import Avatar        from './components/Avatar'
+import { collection, onSnapshot, query } from 'firebase/firestore'
+import { db } from './utils/firebase'
 
 const ScheduleView = lazy(() => import('./views/schedule/ScheduleView'))
 const OpenView     = lazy(() => import('./views/open/OpenView'))
@@ -15,6 +19,7 @@ const UpdatesView  = lazy(() => import('./views/updates/UpdatesView'))
 const ProfileView  = lazy(() => import('./views/profile/ProfileView'))
 const KBView       = lazy(() => import('./views/knowledge/KBView'))
 const EventsView   = lazy(() => import('./views/events/EventsView'))
+const FormsView    = lazy(() => import('./views/forms/FormsView'))
 
 const TABS = [
   { id: 'schedule',  icon: '📅', label: 'Schedule'  },
@@ -22,6 +27,7 @@ const TABS = [
   { id: 'chat',      icon: '💬', label: 'Chat'      },
   { id: 'updates',   icon: '📢', label: 'Updates'   },
   { id: 'events',    icon: '🗓️', label: 'Events'    },
+  { id: 'forms',     icon: '📝', label: 'Forms'     },
   { id: 'knowledge', icon: '📚', label: 'Resources' },
   { id: 'profile',   icon: '👤', label: 'Profile'   },
 ]
@@ -78,7 +84,10 @@ async function enablePushNotifications(userId) {
     const { getToken } = await import('firebase/messaging')
     const { messaging } = await import('./utils/firebase')
     if (!messaging) return { ok: false, reason: 'not_supported' }
-    const reg = await navigator.serviceWorker.register('/app/firebase-messaging-sw.js', { scope: '/app/' })
+    
+    // Wait until the unified service worker is fully active and ready to handle pushes
+    const reg = await navigator.serviceWorker.ready
+    
     const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY
     if (!vapidKey) return { ok: false, reason: 'no_vapid' }
     const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: reg })
@@ -112,6 +121,7 @@ function IOSInstallBanner({ onDismiss }) {
 
 function PushBanner({ userId, onDismiss }) {
   const [status, setStatus] = useState('idle')
+  const [errorMsg, setErrorMsg] = useState('')
 
   const handleEnable = async () => {
     if (!('Notification' in window) || !('serviceWorker' in navigator)) {
@@ -127,7 +137,8 @@ function PushBanner({ userId, onDismiss }) {
     } else if (result.reason === 'no_vapid') {
       setStatus('no_vapid')
     } else {
-      setStatus('unsupported')
+      setErrorMsg(result.reason || 'An unknown error occurred')
+      setStatus('error')
     }
   }
 
@@ -150,6 +161,13 @@ function PushBanner({ userId, onDismiss }) {
       <button onClick={onDismiss} className="text-dim cursor-pointer bg-transparent border-none">×</button>
     </div>
   )
+  if (status === 'error') return (
+    <div className="mx-3 mb-2 flex items-center gap-2 bg-raised border border-danger/30 rounded-xl px-3 py-2.5">
+      <span>⚠️</span>
+      <p className="text-xs text-danger flex-1 truncate" title={errorMsg}>Failed to enable: {errorMsg}</p>
+      <button onClick={onDismiss} className="text-dim cursor-pointer bg-transparent border-none">×</button>
+    </div>
+  )
   return (
     <div className="mx-3 mb-2 flex items-center gap-3 bg-accent-soft border border-accent/30 rounded-xl px-3 py-2.5 animate-fade-in">
       <span className="text-base flex-shrink-0">🔔</span>
@@ -168,24 +186,104 @@ export default function App() {
   const [tab,           setTab]           = useState('schedule')
   const [showPush,      setShowPush]      = useState(false)
   const [pushDismissed, setPushDismissed] = useState(false)
+  const [isOffline,     setIsOffline]     = useState(!navigator.onLine)
 
-  useEffect(() => { init() }, [])
+  useEffect(() => {
+    init()
+    sessionStorage.removeItem('shifthub_teacher_chunk_reload')
+  }, [])
+
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false)
+    const handleOffline = () => setIsOffline(true)
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
 
   useEffect(() => {
     if (!user || !userProfile) return
     useTeacherStore.getState().init(user.uid)
-    useChatStore.getState().init()
+    useChatStore.getState().init(user.uid)
+    useFormsStore.getState().init(user.uid)
     if ((pushSupported || needsHomeScreen) && notifPermission() !== 'granted' && !pushDismissed) {
       setTimeout(() => setShowPush(true), 1500)
     }
     return () => {
       useTeacherStore.getState().cleanup()
       useChatStore.getState().cleanup()
+      useFormsStore.getState().cleanup()
     }
   }, [user?.uid, userProfile?.role])
 
-  const { openShifts, notifications, buzzPosts } = useTeacherStore()
+  useEffect(() => {
+    if (!user) return
+    const params = new URLSearchParams(window.location.search)
+    const qTab = params.get('tab')
+    const qChatId = params.get('chatId')
+
+    if (qTab) {
+      setTab(qTab)
+    }
+    if (qChatId) {
+      useChatStore.getState().setActiveChat(qChatId)
+    }
+
+    if (window.location.search) {
+      window.history.replaceState({}, document.title, window.location.pathname)
+    }
+  }, [user])
+
+  const { myShifts, openShifts, notifications, buzzPosts } = useTeacherStore()
   const { chats, messages } = useChatStore()
+
+  const [hasNewEvents, setHasNewEvents] = useState(false)
+  const [hasNewKB, setHasNewKB] = useState(false)
+
+  const SHIFT_TYPES = [
+    'shift_assigned',
+    'shift_confirmed',
+    'shift_rejected',
+    'shift_claimed',
+    'shift_unconfirmed',
+    'shift_edited',
+    'shift_deleted',
+    'shift_reminder'
+  ]
+
+  useEffect(() => {
+    if (!user) return
+    const q = query(collection(db, 'events'))
+    const unsub = onSnapshot(q, snap => {
+      const lastViewed = Number(localStorage.getItem('shifthub_events_last_viewed') || 0)
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      const hasNew = list.some(e => {
+        const created = e.createdAt?.seconds ? (e.createdAt.seconds * 1000) : (e.createdAt || 0)
+        const updated = e.updatedAt?.seconds ? (e.updatedAt.seconds * 1000) : (e.updatedAt || 0)
+        return created > lastViewed || updated > lastViewed
+      })
+      setHasNewEvents(hasNew)
+    })
+    return unsub
+  }, [user?.uid])
+
+  useEffect(() => {
+    if (!user) return
+    const q = query(collection(db, 'kb_nodes'))
+    const unsub = onSnapshot(q, snap => {
+      const lastViewed = Number(localStorage.getItem('shifthub_kb_last_viewed') || 0)
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      const hasNew = list.some(n => {
+        const created = n.createdAt?.seconds ? (n.createdAt.seconds * 1000) : (n.order || 0)
+        return created > lastViewed
+      })
+      setHasNewKB(hasNew)
+    })
+    return unsub
+  }, [user?.uid])
 
   const unreadChatCount = user ? chats.reduce((total, chat) => {
     const lastReadTs = chat.lastRead?.[user.uid]?.seconds || 0
@@ -195,7 +293,46 @@ export default function App() {
 
   const unreadBuzz = user ? buzzPosts.filter(p => !(p.seenBy || []).includes(user.uid)).length : 0
 
-  const badges = { open: openShifts.length, chat: unreadChatCount, updates: unreadBuzz }
+  const pendingFormsCount = useFormsStore(s => s.assignments.filter(a => a.status === 'pending').length)
+
+  const badges = { open: openShifts.length, chat: unreadChatCount, updates: unreadBuzz, forms: pendingFormsCount }
+
+  const hasNewBadge = (tabId) => {
+    if (tabId === 'schedule') {
+      return myShifts.some(s => s.confirmationStatus === 'pending' || (!s.confirmationStatus && s.instructorId)) ||
+             notifications.some(n => n.status === 'unread' && SHIFT_TYPES.includes(n.type))
+    }
+    if (tabId === 'updates') {
+      return unreadBuzz > 0
+    }
+    if (tabId === 'events') {
+      return hasNewEvents
+    }
+    if (tabId === 'knowledge') {
+      return hasNewKB
+    }
+    return false
+  }
+
+  const handleTabClick = (tabId) => {
+    setTab(tabId)
+    if (tabId === 'schedule') {
+      const unreadShifts = notifications.filter(n => n.status === 'unread' && SHIFT_TYPES.includes(n.type))
+      unreadShifts.forEach(n => useTeacherStore.getState().markNotifRead(n.id))
+    }
+    if (tabId === 'updates') {
+      const unreadPosts = buzzPosts.filter(p => !(p.seenBy || []).includes(user.uid))
+      unreadPosts.forEach(p => useTeacherStore.getState().markBuzzSeen(p.id, user.uid))
+    }
+    if (tabId === 'events') {
+      localStorage.setItem('shifthub_events_last_viewed', String(Date.now()))
+      setHasNewEvents(false)
+    }
+    if (tabId === 'knowledge') {
+      localStorage.setItem('shifthub_kb_last_viewed', String(Date.now()))
+      setHasNewKB(false)
+    }
+  }
 
   if (loading)        return <LoadingScreen />
   if (!user)          return <LoginView />
@@ -204,6 +341,12 @@ export default function App() {
   return (
     // 🚨 ChatGPT Fix: Standard w-full h-full that naturally inherits the 100dvh from #root
     <div className="bg-app flex flex-col w-full h-full overflow-hidden">
+      {isOffline && (
+        <div className="bg-amber-600 dark:bg-amber-700 text-white text-center py-1.5 text-xs font-semibold tracking-wide shadow-sm flex items-center justify-center gap-1.5 flex-shrink-0 z-[9999]">
+          <span>📴</span>
+          <span>Offline Mode — Viewing Cached Data</span>
+        </div>
+      )}
 
       {/* Top bar */}
       <div className="flex items-center justify-between px-4 pb-3 bg-surface border-b border-app flex-shrink-0"
@@ -213,10 +356,13 @@ export default function App() {
           <p className="text-lg font-bold text-primary leading-tight">{userProfile?.firstName || 'Teacher'}</p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold"
-            style={{ background: userProfile?.color || 'var(--accent)', color: '#fff' }}>
-            {(userProfile?.firstName?.[0] || '') + (userProfile?.lastName?.[0] || '')}
-          </div>
+          <Avatar
+            firstName={userProfile?.firstName}
+            lastName={userProfile?.lastName}
+            color={userProfile?.color}
+            photo={userProfile?.photo}
+            size={32}
+          />
           {(pushSupported || needsHomeScreen) && (
             <button onClick={() => { setShowPush(true); setPushDismissed(false) }}
               title="Enable notifications"
@@ -242,10 +388,10 @@ export default function App() {
           : <PushBanner userId={user?.uid} onDismiss={() => { setShowPush(false); setPushDismissed(true) }} />
       )}
 
-      {/* Tab content (Scrollable middle section) */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
+      {/* Tab content (Bounded viewport wrapper) */}
+      <div className="flex-1 overflow-hidden min-h-0 relative">
         {TABS.map(t => (
-          <div key={t.id} style={{ display: tab === t.id ? 'flex' : 'none' }} className="h-full flex-col">
+          <div key={t.id} style={{ display: tab === t.id ? 'flex' : 'none' }} className="absolute inset-0 flex-col">
             <ErrorBoundary>
               <Suspense fallback={<ViewLoader />}>
                 {t.id === 'schedule'  && <ScheduleView />}
@@ -253,6 +399,7 @@ export default function App() {
                 {t.id === 'chat'      && <ChatView />}
                 {t.id === 'updates'   && <UpdatesView />}
                 {t.id === 'events'    && <EventsView />}
+                {t.id === 'forms'     && <FormsView />}
                 {t.id === 'knowledge' && <KBView />}
                 {t.id === 'profile'   && <ProfileView />}
               </Suspense>
@@ -263,22 +410,28 @@ export default function App() {
 
       {/* Tab bar */}
       <div className="flex-shrink-0 bg-surface border-t border-app"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)', zIndex: 1 }}>
+        style={{ zIndex: 1, paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 8px)' }}>
         <div className="flex">
           {TABS.map(t => {
             const badge    = badges[t.id] || 0
             const isActive = tab === t.id
             return (
-              <button key={t.id} onClick={() => setTab(t.id)}
+              <button key={t.id} onClick={() => handleTabClick(t.id)}
                 className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 cursor-pointer border-none transition-colors min-w-0
                   ${isActive ? 'bg-accent-soft' : 'bg-transparent'}`}>
                 <div className="relative">
                   <span style={{ fontSize: 20, lineHeight: 1 }}>{t.icon}</span>
-                  {badge > 0 && (
-                    <span className="absolute -top-1 -right-2.5 min-w-[15px] h-[15px] rounded-full bg-red-500 text-white font-bold flex items-center justify-center"
-                      style={{ fontSize: 9, padding: '0 2px' }}>
-                      {badge > 9 ? '9+' : badge}
+                  {hasNewBadge(t.id) ? (
+                    <span className="absolute -top-1.5 -right-5 px-1 py-0.5 rounded-full bg-red-500 text-white font-extrabold text-[7px] uppercase tracking-wider leading-none shadow-sm flex items-center justify-center animate-pulse">
+                      new
                     </span>
+                  ) : (
+                    badge > 0 && (
+                      <span className="absolute -top-1 -right-2.5 min-w-[15px] h-[15px] rounded-full bg-red-500 text-white font-bold flex items-center justify-center"
+                        style={{ fontSize: 9, padding: '0 2px' }}>
+                        {badge > 9 ? '9+' : badge}
+                      </span>
+                    )
                   )}
                 </div>
                 <span className={`font-semibold truncate w-full text-center px-0.5 ${isActive ? 'text-accent' : 'text-gray-400'}`}

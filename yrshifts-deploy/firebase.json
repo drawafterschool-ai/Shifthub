@@ -20,6 +20,10 @@
         "destination": "/admin/index.html"
       },
       {
+        "source": "/calendar/**",
+        "function": "teacherCalendarFeed"
+      },
+      {
         "source": "/app/**",
         "destination": "/app/index.html"
       },
@@ -30,17 +34,12 @@
     ],
     "headers": [
       {
-        "source": "**/assets/**",
+        "source": "**",
         "headers": [
           {
             "key": "Cache-Control",
-            "value": "max-age=31536000, immutable"
-          }
-        ]
-      },
-      {
-        "source": "**",
-        "headers": [
+            "value": "no-cache, no-store, must-revalidate"
+          },
           {
             "key": "X-Content-Type-Options",
             "value": "nosniff"
@@ -54,11 +53,23 @@
             "value": "strict-origin-when-cross-origin"
           }
         ]
+      },
+      {
+        "source": "**/assets/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "max-age=31536000, immutable"
+          }
+        ]
       }
     ]
   },
   "firestore": {
     "rules": "firestore.rules"
+  },
+  "storage": {
+    "rules": "storage.rules"
   },
   "functions": {
     "source": "functions",

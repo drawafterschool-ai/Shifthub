@@ -8,6 +8,7 @@ import useDirectoryStore   from '../../stores/useDirectoryStore'
 import { uid }             from '../../utils/helpers'
 import Button              from '../../components/Button'
 import Modal, { ModalHeader, ModalFooter } from '../../components/Modal'
+import { isBiometricsSupported, registerBiometrics, disableBiometrics, isBiometricsEnabled } from '../../utils/biometric'
 
 const INPUT = "w-full bg-raised border border-app rounded-lg px-3 py-2.5 text-sm text-primary placeholder:text-dim outline-none focus:border-accent transition-colors"
 const COLOURS = ['#6366F1','#0EA5E9','#10B981','#EC4899','#F59E0B',
@@ -389,6 +390,41 @@ export default function SettingsView() {
   const [saving, setSaving] = useState(false)
   const [danger, setDanger] = useState(false)
 
+  const [bioSupported, setBioSupported] = useState(false)
+  const [bioEnabled, setBioEnabled] = useState(false)
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [bioError, setBioError] = useState('')
+
+  useEffect(() => {
+    async function checkBio() {
+      const supported = await isBiometricsSupported()
+      setBioSupported(supported)
+      setBioEnabled(isBiometricsEnabled())
+    }
+    checkBio()
+  }, [])
+
+  const handleDisableBio = () => {
+    disableBiometrics()
+    setBioEnabled(false)
+    setConfirmPassword('')
+    setBioError('')
+  }
+
+  const handleEnableBio = async () => {
+    setBioError('')
+    try {
+      const email = useAuthStore.getState().user?.email
+      if (!email) throw new Error('You must be signed in to configure biometrics')
+      await registerBiometrics(email, confirmPassword)
+      setBioEnabled(true)
+      setConfirmPassword('')
+    } catch (err) {
+      console.warn(err)
+      setBioError(err.message || 'Verification or sensor prompt failed.')
+    }
+  }
+
   // Sync from store once loaded
   const { jobs: storeJobs } = useScheduleStore()
 
@@ -536,6 +572,43 @@ export default function SettingsView() {
               </div>
             </div>
           </div>
+        </Section>
+
+        <Section icon="🔒" title="Biometric Quick Login" description="Use device biometrics (Face ID / Touch ID / fingerprint) for instant sign-in on this browser.">
+          {!bioSupported ? (
+            <div className="text-xs text-muted leading-relaxed">
+              ⚠️ Biometric quick login is not supported by this device or browser.
+            </div>
+          ) : bioEnabled ? (
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-ok font-semibold">🧬 Biometrics active on this device</p>
+                <p className="text-2xs text-dim">You will be logged in automatically using Face ID / fingerprint.</p>
+              </div>
+              <Button variant="danger" onClick={handleDisableBio}>Disable Biometrics</Button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <p className="text-xs text-muted leading-relaxed">
+                To enable quick login, please confirm your current login password. This is securely saved in your local sandbox to perform background Firebase authentication.
+              </p>
+              {bioError && (
+                <p className="text-xs text-danger font-semibold">⚠️ {bioError}</p>
+              )}
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm your password"
+                  className={`${INPUT} flex-1`}
+                />
+                <Button variant="primary" onClick={handleEnableBio} disabled={!confirmPassword}>
+                  Enable Biometrics
+                </Button>
+              </div>
+            </div>
+          )}
         </Section>
 
         <Section icon="⚙️" title="Account">

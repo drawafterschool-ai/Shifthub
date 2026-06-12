@@ -12,6 +12,17 @@ export default class ErrorBoundary extends Component {
 
   componentDidCatch(error, info) {
     console.error('ErrorBoundary caught:', error, info)
+
+    const msg = error?.message || ''
+    const isChunkError = msg.includes('Failed to fetch dynamically imported module') || msg.includes('chunk') || msg.includes('dynamic')
+    if (isChunkError) {
+      const storageKey = 'shifthub_teacher_chunk_reload'
+      const reloadCount = parseInt(sessionStorage.getItem(storageKey) || '0', 10)
+      if (reloadCount < 1) {
+        sessionStorage.setItem(storageKey, '1')
+        window.location.reload()
+      }
+    }
   }
 
   render() {

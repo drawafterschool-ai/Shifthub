@@ -20,15 +20,58 @@ const INPUT = "w-full bg-raised border border-app rounded-lg px-3 py-2.5 text-sm
 function fmtEventDate(dateStr, timeStr) {
   if (!dateStr) return ''
   const d = new Date(dateStr + 'T12:00:00')
+  if (isNaN(d.getTime())) return ''
   const dateLabel = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
-  return timeStr ? `${dateLabel} at ${timeStr}` : dateLabel
+  if (timeStr) {
+    if (timeStr.includes('-') || timeStr.includes('–')) {
+      const parts = timeStr.split(/[-–]/).map(p => p.trim())
+      const formattedParts = parts.map(part => {
+        if (!part.includes(':')) return part
+        const [h, m] = part.split(':').map(Number)
+        if (isNaN(h) || isNaN(m)) return part
+        const period = h >= 12 ? 'PM' : 'AM'
+        const h12    = ((h % 12) || 12)
+        return `${h12}:${String(m).padStart(2,'0')} ${period}`
+      })
+      return `${dateLabel} at ${formattedParts.join(' – ')}`
+    }
+    
+    if (timeStr.includes(':')) {
+      const [h, m] = timeStr.split(':').map(Number)
+      if (!isNaN(h) && !isNaN(m)) {
+        const period = h >= 12 ? 'PM' : 'AM'
+        const h12    = ((h % 12) || 12)
+        return `${dateLabel} at ${h12}:${String(m).padStart(2,'0')} ${period}`
+      }
+    }
+    return `${dateLabel} at ${timeStr}`
+  }
+  return dateLabel
 }
 
 // ── Event form modal ──────────────────────────────────────────────────────────
 function EventModal({ existing, onClose, onSave }) {
   const [title,    setTitle]    = useState(existing?.title    || '')
   const [date,     setDate]     = useState(existing?.date     || '')
-  const [time,     setTime]     = useState(existing?.time     || '')
+  
+  const [startTime, setStartTime] = useState(() => {
+    if (existing?.startTime) return existing.startTime
+    if (existing?.time) {
+      const parts = existing.time.split(/[-–]/).map(p => p.trim())
+      if (parts[0]) return parts[0]
+    }
+    return '10:00' // Default 10am
+  })
+  
+  const [endTime, setEndTime] = useState(() => {
+    if (existing?.endTime) return existing.endTime
+    if (existing?.time) {
+      const parts = existing.time.split(/[-–]/).map(p => p.trim())
+      if (parts[1]) return parts[1]
+    }
+    return '12:00' // Default 12pm
+  })
+
   const [location,   setLocation]   = useState(existing?.location || '')
   const [locSugs,    setLocSugs]    = useState([])
   const [showLocSug, setShowLocSug] = useState(false)
@@ -54,7 +97,16 @@ function EventModal({ existing, onClose, onSave }) {
   const handleSave = async () => {
     if (!title.trim() || !date) return
     setBusy(true)
-    await onSave({ title: title.trim(), date, time, location: location.trim(), notes: notes.trim() })
+    const timeStr = `${startTime}-${endTime}`
+    await onSave({
+      title: title.trim(),
+      date,
+      time: timeStr,
+      startTime,
+      endTime,
+      location: location.trim(),
+      notes: notes.trim()
+    })
     setBusy(false)
     onClose()
   }
@@ -67,14 +119,18 @@ function EventModal({ existing, onClose, onSave }) {
           <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1.5">Title *</label>
           <input value={title} onChange={e => setTitle(e.target.value)} autoFocus className={INPUT} placeholder="e.g. Spring Teacher Meeting" />
         </div>
+        <div>
+          <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1.5">Date *</label>
+          <input type="date" value={date} onChange={e => setDate(e.target.value)} className={INPUT} />
+        </div>
         <div className="flex gap-3">
           <div className="flex-1">
-            <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1.5">Date *</label>
-            <input type="date" value={date} onChange={e => setDate(e.target.value)} className={INPUT} />
+            <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1.5">Start Time</label>
+            <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className={INPUT} />
           </div>
           <div className="flex-1">
-            <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1.5">Time</label>
-            <input type="time" value={time} onChange={e => setTime(e.target.value)} className={INPUT} />
+            <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1.5">End Time</label>
+            <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className={INPUT} />
           </div>
         </div>
         <div>

@@ -3,12 +3,18 @@ import {
   signInWithEmailAndPassword,
   confirmPasswordReset,
   verifyPasswordResetCode,
+  setPersistence,
+  browserLocalPersistence,
+  browserSessionPersistence,
 } from 'firebase/auth'
-import { auth } from '../utils/firebase'
+import { httpsCallable } from 'firebase/functions'
+import { auth, functions } from '../utils/firebase'
+import { isBiometricsSupported, authenticateBiometrics, isBiometricsEnabled } from '../utils/biometric'
 
 export default function LoginView() {
   const [mode,       setMode]       = useState('detecting')
   const [oobCode,    setOobCode]    = useState('')
+  const [customToken, setCustomToken] = useState('')
   const [resetEmail, setResetEmail] = useState('')
   const [newPass,    setNewPass]    = useState('')
   const [newPass2,   setNewPass2]   = useState('')
@@ -16,6 +22,53 @@ export default function LoginView() {
   const [password,   setPassword]   = useState('')
   const [error,      setError]      = useState('')
   const [loading,    setLoading]    = useState(false)
+  
+  // Resend invite link flow state
+  const [resendLoading, setResendLoading] = useState(false)
+  const [resendSuccess, setResendSuccess] = useState(false)
+  const [resendError,   setResendError]   = useState('')
+
+  const [bioSupported, setBioSupported] = useState(false)
+  const [bioEnabled, setBioEnabled] = useState(false)
+  const [staySignedIn, setStaySignedIn] = useState(true)
+
+  const handleBiometricLogin = async () => {
+    if (!mounted.current) return
+    setError('')
+    setLoading(true)
+    try {
+      const creds = await authenticateBiometrics()
+      await signInWithEmailAndPassword(auth, creds.email, creds.password)
+    } catch (err) {
+      console.warn('Biometric login failed:', err)
+      if (mounted.current) {
+        setError(err.message || 'Biometric authentication failed')
+      }
+    } finally {
+      if (mounted.current) {
+        setLoading(false)
+      }
+    }
+  }
+
+  useEffect(() => {
+    async function checkBio() {
+      const supported = await isBiometricsSupported()
+      if (mounted.current) setBioSupported(supported)
+      const enabled = isBiometricsEnabled()
+      if (mounted.current) setBioEnabled(enabled)
+      
+      if (supported && enabled) {
+        setTimeout(() => {
+          if (mounted.current) {
+            handleBiometricLogin()
+          }
+        }, 600)
+      }
+    }
+    checkBio()
+  }, [])
+
   const mounted = useRef(true)
 
   useEffect(() => {
@@ -23,29 +76,91 @@ export default function LoginView() {
     return () => { mounted.current = false }
   }, [])
 
-  // Detect Firebase action URL (?mode=resetPassword&oobCode=XXX)
+  // Detect Firebase action URL (?mode=resetPassword&oobCode=XXX&email=...) or custom token (?mode=resetPassword&token=XXX&email=...)
   useEffect(() => {
     const params  = new URLSearchParams(window.location.search)
     const urlMode = params.get('mode')
     const code    = params.get('oobCode')
+    const token   = params.get('token')
+    const emailParam = params.get('email') || ''
 
-    if (urlMode === 'resetPassword' && code) {
-      setOobCode(code)
-      verifyPasswordResetCode(auth, code)
-        .then(email => {
-          if (!mounted.current) return
-          setResetEmail(email)
-          setMode('reset')
-        })
-        .catch(() => {
-          if (!mounted.current) return
-          setMode('expired')
-          window.history.replaceState({}, '', window.location.pathname)
-        })
+    if (urlMode === 'resetPassword') {
+      if (code) {
+        setOobCode(code)
+        verifyPasswordResetCode(auth, code)
+          .then(email => {
+            if (!mounted.current) return
+            setResetEmail(email)
+            setEmail(email)
+            setMode('reset')
+          })
+          .catch(() => {
+            if (!mounted.current) return
+            if (emailParam) {
+              setResetEmail(emailParam)
+              setEmail(emailParam)
+            }
+            setMode('expired')
+            window.history.replaceState({}, '', window.location.pathname)
+          })
+      } else if (token) {
+        setCustomToken(token)
+        const verifyFn = httpsCallable(functions, 'verifyResetToken')
+        verifyFn({ token })
+          .then(res => {
+            if (!mounted.current) return
+            if (res.data?.valid) {
+              setResetEmail(res.data.email)
+              setEmail(res.data.email)
+              setMode('reset')
+            } else {
+              if (emailParam) {
+                setResetEmail(emailParam)
+                setEmail(emailParam)
+              }
+              setMode('expired')
+              window.history.replaceState({}, '', window.location.pathname)
+            }
+          })
+          .catch(() => {
+            if (!mounted.current) return
+            if (emailParam) {
+              setResetEmail(emailParam)
+              setEmail(emailParam)
+            }
+            setMode('expired')
+            window.history.replaceState({}, '', window.location.pathname)
+          })
+      } else {
+        setMode('login')
+      }
     } else {
       setMode('login')
     }
   }, [])
+
+  const handleResendInvite = async () => {
+    if (!mounted.current) return
+    setResendLoading(true)
+    setResendError('')
+    setResendSuccess(false)
+    try {
+      const resendFn = httpsCallable(functions, 'resendInvite')
+      await resendFn({ email: email.trim().toLowerCase() })
+      if (mounted.current) {
+        setResendSuccess(true)
+      }
+    } catch (err) {
+      console.error('Resend error:', err)
+      if (mounted.current) {
+        setResendError(err.message || 'Failed to resend invite link. Please try again.')
+      }
+    } finally {
+      if (mounted.current) {
+        setResendLoading(false)
+      }
+    }
+  }
 
   // Set new password then rely on auth state to transition into the app
   const handleResetSubmit = async (e) => {
@@ -56,22 +171,37 @@ export default function LoginView() {
     if (newPass !== newPass2) { setError('Passwords do not match.'); return }
     setLoading(true)
     try {
-      // 1. Set the password
-      await confirmPasswordReset(auth, oobCode, newPass)
+      if (customToken) {
+        // Complete password reset via Cloud Function
+        const completeFn = httpsCallable(functions, 'completeResetPassword')
+        await completeFn({ token: customToken, newPassword: newPass })
 
-      // 2. Show spinner
-      if (mounted.current) setMode('success')
+        // Show spinner
+        if (mounted.current) setMode('success')
 
-      // 3. Sign in
-      await signInWithEmailAndPassword(auth, resetEmail, newPass)
+        // Sign in
+        await signInWithEmailAndPassword(auth, resetEmail, newPass)
 
-      // 4. Remove reset query params and let auth listener render the app
-      window.history.replaceState({}, '', window.location.pathname)
+        // Remove query parameters
+        window.history.replaceState({}, '', window.location.pathname)
+      } else {
+        // 1. Set the password using Firebase code
+        await confirmPasswordReset(auth, oobCode, newPass)
+
+        // 2. Show spinner
+        if (mounted.current) setMode('success')
+
+        // 3. Sign in
+        await signInWithEmailAndPassword(auth, resetEmail, newPass)
+
+        // 4. Remove reset query params and let auth listener render the app
+        window.history.replaceState({}, '', window.location.pathname)
+      }
     } catch (err) {
       console.error('Reset error:', err.code, err.message)
       if (!mounted.current) return
       setLoading(false)
-      if (err.code === 'auth/expired-action-code' || err.code === 'auth/invalid-action-code') {
+      if (err.code === 'auth/expired-action-code' || err.code === 'auth/invalid-action-code' || err.message?.includes('expired') || err.message?.includes('not found')) {
         setMode('expired')
       } else if (
         err.code === 'auth/invalid-credential' ||
@@ -97,6 +227,7 @@ export default function LoginView() {
     setError('')
     setLoading(true)
     try {
+      await setPersistence(auth, staySignedIn ? browserLocalPersistence : browserSessionPersistence)
       const normalizedEmail = email.trim().toLowerCase()
       await signInWithEmailAndPassword(auth, normalizedEmail, password)
     } catch (err) {
@@ -143,10 +274,48 @@ export default function LoginView() {
             <div className="text-center py-4">
               <p className="text-3xl mb-3">⏱</p>
               <p className="text-sm font-semibold text-primary mb-2">This link has expired</p>
-              <p className="text-sm text-muted leading-relaxed mb-5">
-                Invite links expire after 1 hour. Ask your administrator to send a new one.
-              </p>
-              <button onClick={() => { setMode('login'); setError('') }}
+              
+              {resendSuccess ? (
+                <div className="bg-ok-soft border border-ok/30 text-ok rounded-xl px-4 py-3 text-sm mb-5 leading-relaxed">
+                  ✅ A fresh invitation link has been successfully emailed to <strong>{email}</strong>! Please check your inbox.
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm text-muted leading-relaxed mb-5">
+                    Invite links expire after 1 hour. Enter your email below to request a new invitation link.
+                  </p>
+                  
+                  {resendError && (
+                    <div className="bg-danger-soft border border-danger/30 text-danger rounded-xl px-3 py-2.5 text-sm mb-4">
+                      ⚠️ {resendError}
+                    </div>
+                  )}
+
+                  <div className="mb-4 text-left">
+                    <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1.5">
+                      Email address
+                    </label>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      required
+                      placeholder="you@example.com"
+                      className={INPUT}
+                    />
+                  </div>
+
+                  <button
+                    onClick={handleResendInvite}
+                    disabled={resendLoading || !email}
+                    className="w-full bg-accent hover:opacity-90 disabled:opacity-50 text-white font-bold py-3 rounded-xl text-sm cursor-pointer border-none mb-5"
+                  >
+                    {resendLoading ? 'Requesting fresh link…' : '✉️ Resend invitation link'}
+                  </button>
+                </>
+              )}
+
+              <button onClick={() => { setMode('login'); setError(''); setResendSuccess(false); setResendError(''); }}
                 className="text-sm text-accent font-semibold cursor-pointer bg-transparent border-none">
                 ← Sign in instead
               </button>
@@ -210,10 +379,36 @@ export default function LoginView() {
                 <input type="password" value={password} onChange={e => setPassword(e.target.value)}
                   required placeholder="••••••••" className={INPUT} autoFocus={!!email} />
               </div>
-              <button type="submit" disabled={loading}
-                className="w-full bg-accent hover:opacity-90 disabled:opacity-50 text-white font-bold py-3 rounded-xl text-sm cursor-pointer border-none mt-1">
-                {loading ? 'Signing in…' : 'Sign in'}
-              </button>
+              {/* Stay signed in checkbox */}
+              <div className="flex items-center mb-2">
+                <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-muted select-none">
+                  <input
+                    type="checkbox"
+                    checked={staySignedIn}
+                    onChange={e => setStaySignedIn(e.target.checked)}
+                    className="w-4 h-4 accent-accent rounded border-app bg-raised outline-none cursor-pointer"
+                  />
+                  Stay signed in
+                </label>
+              </div>
+
+              <div className="flex items-center gap-2 mt-1">
+                <button type="submit" disabled={loading}
+                  className="flex-1 bg-accent hover:opacity-90 disabled:opacity-50 text-white font-bold py-3 rounded-xl text-sm cursor-pointer border-none">
+                  {loading ? 'Signing in…' : 'Sign in'}
+                </button>
+                {bioSupported && bioEnabled && (
+                  <button
+                    type="button"
+                    onClick={handleBiometricLogin}
+                    disabled={loading}
+                    title="Sign in with Face ID / fingerprint"
+                    className="w-12 h-12 flex items-center justify-center bg-raised border border-app hover:border-accent rounded-xl text-xl cursor-pointer disabled:opacity-50 transition-colors"
+                  >
+                    🧬
+                  </button>
+                )}
+              </div>
             </form>
           )}
         </div>

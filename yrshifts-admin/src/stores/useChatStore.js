@@ -36,10 +36,15 @@ const useChatStore = create((set, get) => ({
               [chat.id]: msgSnap.docs.map(d => ({ id: d.id, ...d.data() })),
             },
           }))
+        }, (err) => {
+          console.error(`Error loading messages for chat ${chat.id}:`, err)
         })
         unsub._chatId = chat.id
         set(s => ({ _unsubs: [...s._unsubs, unsub] }))
       })
+    }, (err) => {
+      console.error('Error loading chats:', err)
+      set({ loading: false })
     })
     set(s => ({ _unsubs: [...s._unsubs, unsubChats] }))
   },
@@ -61,6 +66,8 @@ const useChatStore = create((set, get) => ({
           [chatId]: snap.docs.map(d => ({ id: d.id, ...d.data() })),
         },
       }))
+    }, (err) => {
+      console.error(`Error loading messages for active chat ${chatId}:`, err)
     })
     unsub._chatId = chatId
     set(s => ({ _unsubs: [...s._unsubs, unsub] }))
@@ -132,7 +139,7 @@ const useChatStore = create((set, get) => ({
     await updateDoc(doc(db, 'chats', chatId, 'messages', msgId), { reactions })
   },
 
-  async createChat({ name, members, isGroup, createdBy }) {
+  async createChat({ name, members, isGroup, createdBy, icon, color, photo }) {
     const ref = await addDoc(collection(db, 'chats'), {
       name:        name || '',
       members:     members || [],
@@ -142,6 +149,9 @@ const useChatStore = create((set, get) => ({
       lastMessage: '',
       lastAt:      serverTimestamp(),
       pinnedAt:    null,
+      icon:        icon || null,
+      color:       color || null,
+      photo:       photo || null,
     })
     return ref.id
   },
