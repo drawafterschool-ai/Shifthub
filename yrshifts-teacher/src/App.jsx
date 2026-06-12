@@ -339,8 +339,8 @@ export default function App() {
   if (profileMissing) return <ProfileMissingScreen onSignOut={signOut} />
 
   return (
-    // 🚨 ChatGPT Fix: Standard w-full h-full that naturally inherits the 100dvh from #root
-    <div className="bg-app flex flex-col w-full h-full overflow-hidden">
+    // 🚨 ChatGPT Fix: Standard w-full h-full that naturally inherits the 100dvh from #root, with fixed position for iOS toolbar containment
+    <div className="bg-app flex flex-col w-full h-full overflow-hidden" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
       {isOffline && (
         <div className="bg-amber-600 dark:bg-amber-700 text-white text-center py-1.5 text-xs font-semibold tracking-wide shadow-sm flex items-center justify-center gap-1.5 flex-shrink-0 z-[9999]">
           <span>📴</span>
