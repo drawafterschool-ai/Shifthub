@@ -26,6 +26,37 @@ const useChatStore = create((set, get) => ({
         })
       set({ chats, loading: false })
 
+      // garbage collect deleted or removed chat listeners
+      const currentChatIds = chats.map(c => c.id)
+      const unsubsToKeep = []
+      const unsubsToRemove = []
+
+      get()._unsubs.forEach(unsub => {
+        // If it's a message listener and its chat is no longer in currentChatIds, clean it up!
+        if (unsub._chatId && unsub._chatId !== 'root-chats' && !currentChatIds.includes(unsub._chatId)) {
+          unsubsToRemove.push(unsub)
+        } else {
+          unsubsToKeep.push(unsub)
+        }
+      })
+
+      // Unsubscribe and delete local messages
+      unsubsToRemove.forEach(unsub => {
+        try { unsub() } catch (err) { console.error('Unsub error:', err) }
+      })
+
+      set(s => {
+        const nextMessages = { ...s.messages }
+        unsubsToRemove.forEach(unsub => {
+          delete nextMessages[unsub._chatId]
+        })
+        return {
+          _unsubs: unsubsToKeep,
+          messages: nextMessages
+        }
+      })
+
+      // Establish new message listeners
       chats.forEach(chat => {
         if (get()._unsubs.some(u => u._chatId === chat.id)) return
         const q = query(collection(db, 'chats', chat.id, 'messages'), orderBy('createdAt', 'asc'))
@@ -46,6 +77,7 @@ const useChatStore = create((set, get) => ({
       console.error('Error loading chats:', err)
       set({ loading: false })
     })
+    unsubChats._chatId = 'root-chats'
     set(s => ({ _unsubs: [...s._unsubs, unsubChats] }))
   },
 

@@ -95,7 +95,7 @@ function StoreInit() {
       useChatStore.getState().cleanup()
       useFormsStore.getState().cleanup()
     }
-  }, [user, userProfile])
+  }, [user?.uid, userProfile?.role])
 
   return null
 }

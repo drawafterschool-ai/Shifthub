@@ -10,7 +10,7 @@ try { cachedProfile = cachedProfileStr ? JSON.parse(cachedProfileStr) : null } c
 const useAuthStore = create((set, get) => ({
   user:           null,
   userProfile:    cachedProfile,
-  loading:        !cachedProfile, // not loading if profile cached
+  loading:        true,
   profileMissing: false,
   _profileUnsub:  null,
   _authUnsub:     null,
