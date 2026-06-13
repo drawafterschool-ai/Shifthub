@@ -389,6 +389,13 @@ export default function SettingsView() {
   const [saved,  setSaved]  = useState(false)
   const [saving, setSaving] = useState(false)
   const [danger, setDanger] = useState(false)
+  const [notifSound, setNotifSound] = useState(() => localStorage.getItem('shifthub_notif_sound') || 'default')
+
+  const handleSoundChange = (val) => {
+    setNotifSound(val)
+    localStorage.setItem('shifthub_notif_sound', val)
+    import('../../utils/sound').then(({ playNotificationSound }) => playNotificationSound(val))
+  }
 
   const [bioSupported, setBioSupported] = useState(false)
   const [bioEnabled, setBioEnabled] = useState(false)
@@ -571,6 +578,31 @@ export default function SettingsView() {
                 </button>
               </div>
             </div>
+          </div>
+        </Section>
+
+        <Section icon="🔔" title="Notification sound" description="Choose a custom sound for in-app and chat notifications on this browser.">
+          <div className="flex gap-3 items-center">
+            <div className="flex-1">
+              <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1.5">Sound type</label>
+              <select
+                value={notifSound}
+                onChange={e => handleSoundChange(e.target.value)}
+                className={INPUT}
+              >
+                <option value="none">🔇 None (Silent)</option>
+                <option value="default">🔔 Default (Ping)</option>
+                <option value="chime">🎵 Chime (Two-Tone)</option>
+                <option value="tink">✨ Tink (Metallic)</option>
+                <option value="glass">🍷 Glass (Resonant)</option>
+              </select>
+            </div>
+            <button
+              onClick={() => import('../../utils/sound').then(({ playNotificationSound }) => playNotificationSound(notifSound))}
+              className="px-4 py-2.5 bg-raised border border-app hover:border-accent text-primary rounded-lg text-sm font-semibold cursor-pointer transition-colors mt-5 flex items-center gap-1.5"
+            >
+              🔊 Test
+            </button>
           </div>
         </Section>
 

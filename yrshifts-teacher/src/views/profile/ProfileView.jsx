@@ -28,6 +28,13 @@ export default function ProfileView() {
   const [bioEnabled, setBioEnabled] = useState(false)
   const [confirmPassword, setConfirmPassword] = useState('')
   const [bioError, setBioError] = useState('')
+  const [notifSound, setNotifSound] = useState(() => localStorage.getItem('shifthub_notif_sound') || 'default')
+
+  const handleSoundChange = (val) => {
+    setNotifSound(val)
+    localStorage.setItem('shifthub_notif_sound', val)
+    import('../../utils/sound').then(({ playNotificationSound }) => playNotificationSound(val))
+  }
 
   useEffect(() => {
     async function checkBio() {
@@ -311,6 +318,35 @@ export default function ProfileView() {
           >
             📋 Copy Subscription Link
           </button>
+        </div>
+
+        {/* Notification Sound */}
+        <div className="bg-card border border-app rounded-2xl p-4 flex flex-col gap-4">
+          <p className="text-xs font-bold text-muted uppercase tracking-wide">Notification Sound</p>
+          <p className="text-xs text-muted leading-relaxed">
+            Choose a custom sound for in-app and chat notifications on this browser.
+          </p>
+          <div className="flex gap-2 items-center">
+            <div className="flex-1">
+              <select
+                value={notifSound}
+                onChange={e => handleSoundChange(e.target.value)}
+                className="w-full bg-raised border border-app rounded-xl px-2.5 py-2.5 text-xs text-primary outline-none focus:border-accent"
+              >
+                <option value="none">🔇 None (Silent)</option>
+                <option value="default">🔔 Default (Ping)</option>
+                <option value="chime">🎵 Chime (Two-Tone)</option>
+                <option value="tink">✨ Tink (Metallic)</option>
+                <option value="glass">🍷 Glass (Resonant)</option>
+              </select>
+            </div>
+            <button
+              onClick={() => import('../../utils/sound').then(({ playNotificationSound }) => playNotificationSound(notifSound))}
+              className="px-4 py-2.5 bg-raised border border-app hover:border-accent text-primary rounded-xl text-xs font-bold cursor-pointer transition-colors"
+            >
+              🔊 Test
+            </button>
+          </div>
         </div>
 
         {/* Biometric Quick Login */}

@@ -12,6 +12,8 @@ const useNotificationsStore = create((set, get) => ({
     // Clean up any existing subscription first to avoid leaks
     get().cleanup()
 
+    let isInitial = true
+
     const handleSnap = (snap) => {
       const items = snap.docs.map(d => ({ id: d.id, ...d.data() }))
       
@@ -23,6 +25,22 @@ const useNotificationsStore = create((set, get) => ({
       })
       
       set({ notifications: items, loading: false })
+
+      if (isInitial) {
+        isInitial = false
+        return
+      }
+
+      // Check if any notification was newly added and is unread
+      const hasNewIncoming = snap.docChanges().some(change => {
+        if (change.type !== 'added') return false
+        const n = change.doc.data()
+        return n && n.status === 'unread'
+      })
+
+      if (hasNewIncoming) {
+        import('../utils/sound').then(({ playNotificationSound }) => playNotificationSound())
+      }
     }
 
     const q = query(
