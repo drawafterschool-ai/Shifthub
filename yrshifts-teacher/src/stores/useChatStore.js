@@ -5,6 +5,7 @@ import {
   serverTimestamp, writeBatch, getDocs,
 } from 'firebase/firestore'
 import { db } from '../utils/firebase'
+import useAuthStore from './useAuthStore'
 
 const useChatStore = create((set, get) => ({
   chats:        [],
@@ -65,13 +66,31 @@ const useChatStore = create((set, get) => ({
       chats.forEach(chat => {
         if (get()._unsubs.some(u => u._chatId === chat.id)) return
         const q = query(collection(db, 'chats', chat.id, 'messages'), orderBy('createdAt', 'asc'))
+        let isInitial = true
         const unsub = onSnapshot(q, (msgSnap) => {
+          const list = msgSnap.docs.map(d => ({ id: d.id, ...d.data() }))
           set(s => ({
             messages: {
               ...s.messages,
-              [chat.id]: msgSnap.docs.map(d => ({ id: d.id, ...d.data() })),
+              [chat.id]: list,
             },
           }))
+
+          if (isInitial) {
+            isInitial = false
+            return
+          }
+
+          const currentUserId = useAuthStore.getState().user?.uid
+          const hasNewIncoming = msgSnap.docChanges().some(change => {
+            if (change.type !== 'added') return false
+            const m = change.doc.data()
+            return m && m.authorId !== currentUserId
+          })
+
+          if (hasNewIncoming) {
+            import('../utils/sound').then(({ playNotificationSound }) => playNotificationSound())
+          }
         })
         unsub._chatId = chat.id
         set(s => ({ _unsubs: [...s._unsubs, unsub] }))
@@ -91,13 +110,31 @@ const useChatStore = create((set, get) => ({
     if (!chatId) return
     if (get()._unsubs.some(u => u._chatId === chatId)) return
     const q = query(collection(db, 'chats', chatId, 'messages'), orderBy('createdAt', 'asc'))
+    let isInitial = true
     const unsub = onSnapshot(q, (snap) => {
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }))
       set(s => ({
         messages: {
           ...s.messages,
-          [chatId]: snap.docs.map(d => ({ id: d.id, ...d.data() })),
+          [chatId]: list,
         },
       }))
+
+      if (isInitial) {
+        isInitial = false
+        return
+      }
+
+      const currentUserId = useAuthStore.getState().user?.uid
+      const hasNewIncoming = snap.docChanges().some(change => {
+        if (change.type !== 'added') return false
+        const m = change.doc.data()
+        return m && m.authorId !== currentUserId
+      })
+
+      if (hasNewIncoming) {
+        import('../utils/sound').then(({ playNotificationSound }) => playNotificationSound())
+      }
     })
     unsub._chatId = chatId
     set(s => ({ _unsubs: [...s._unsubs, unsub] }))

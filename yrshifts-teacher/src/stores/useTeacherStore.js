@@ -72,6 +72,7 @@ const useTeacherStore = create((set, get) => ({
 
     // My notifications
     const q3 = query(collection(db, 'notifications'), where('recipientId', '==', userId))
+    let isInitialNotif = true
     const u3  = onSnapshot(q3, snap => {
       const list = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => b.createdAt - a.createdAt)
       set({ notifications: list })
@@ -79,6 +80,22 @@ const useTeacherStore = create((set, get) => ({
         localStorage.setItem(`shifthub_notifications_${userId}`, JSON.stringify(list))
       } catch (e) {
         console.warn('Error saving notifications to cache:', e)
+      }
+
+      if (isInitialNotif) {
+        isInitialNotif = false
+        return
+      }
+
+      // Check if any notification was newly added and is unread
+      const hasNewIncoming = snap.docChanges().some(change => {
+        if (change.type !== 'added') return false
+        const n = change.doc.data()
+        return n && n.status === 'unread'
+      })
+
+      if (hasNewIncoming) {
+        import('../utils/sound').then(({ playNotificationSound }) => playNotificationSound())
       }
     })
 
