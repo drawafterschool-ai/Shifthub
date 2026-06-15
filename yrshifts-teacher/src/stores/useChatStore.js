@@ -7,6 +7,8 @@ import {
 import { db } from '../utils/firebase'
 import useAuthStore from './useAuthStore'
 
+const sessionStart = Date.now()
+
 const useChatStore = create((set, get) => ({
   chats:        [],
   messages:     {},
@@ -85,7 +87,11 @@ const useChatStore = create((set, get) => ({
           const hasNewIncoming = msgSnap.docChanges().some(change => {
             if (change.type !== 'added') return false
             const m = change.doc.data()
-            return m && m.authorId !== currentUserId
+            if (!m || m.authorId === currentUserId) return false
+            const createdTime = m.createdAt?.toMillis
+              ? m.createdAt.toMillis()
+              : (m.createdAt?.seconds ? m.createdAt.seconds * 1000 : (Number(m.createdAt) || 0))
+            return !createdTime || createdTime > sessionStart
           })
 
           if (hasNewIncoming) {
@@ -129,7 +135,11 @@ const useChatStore = create((set, get) => ({
       const hasNewIncoming = snap.docChanges().some(change => {
         if (change.type !== 'added') return false
         const m = change.doc.data()
-        return m && m.authorId !== currentUserId
+        if (!m || m.authorId === currentUserId) return false
+        const createdTime = m.createdAt?.toMillis
+          ? m.createdAt.toMillis()
+          : (m.createdAt?.seconds ? m.createdAt.seconds * 1000 : (Number(m.createdAt) || 0))
+        return !createdTime || createdTime > sessionStart
       })
 
       if (hasNewIncoming) {

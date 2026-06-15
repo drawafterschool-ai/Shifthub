@@ -12,7 +12,9 @@ export const playNotificationSound = (soundType = null) => {
       ctx.resume()
     }
 
+    let maxEnd = 0
     const playTone = (freq, duration, oscType = 'sine', startTime = 0, volume = 0.1) => {
+      maxEnd = Math.max(maxEnd, startTime + duration)
       const osc = ctx.createOscillator()
       const gain = ctx.createGain()
 
@@ -46,6 +48,11 @@ export const playNotificationSound = (soundType = null) => {
       playTone(1568, 0.4, 'sine', 0, 0.05)
       playTone(2093, 0.3, 'sine', 0, 0.03)
     }
+
+    // Close context after playback completes to release hardware resources
+    setTimeout(() => {
+      ctx.close().catch(() => {})
+    }, (maxEnd * 1000) + 100)
   } catch (e) {
     console.error('Failed to play notification sound:', e)
   }

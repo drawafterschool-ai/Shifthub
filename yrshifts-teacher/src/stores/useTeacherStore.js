@@ -6,6 +6,8 @@ import {
 import { db } from '../utils/firebase'
 import { createNotification } from '../utils/notifications'
 
+const sessionStart = Date.now()
+
 const useTeacherStore = create((set, get) => ({
   myShifts:      [],   // shifts assigned to me
   openShifts:    [],   // claimable unassigned shifts
@@ -91,7 +93,11 @@ const useTeacherStore = create((set, get) => ({
       const hasNewIncoming = snap.docChanges().some(change => {
         if (change.type !== 'added') return false
         const n = change.doc.data()
-        return n && n.status === 'unread'
+        if (!n || n.status !== 'unread') return false
+        const createdTime = n.createdAt?.toMillis
+          ? n.createdAt.toMillis()
+          : (n.createdAt?.seconds ? n.createdAt.seconds * 1000 : (Number(n.createdAt) || 0))
+        return !createdTime || createdTime > sessionStart
       })
 
       if (hasNewIncoming) {
