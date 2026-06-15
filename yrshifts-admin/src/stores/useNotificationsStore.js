@@ -3,6 +3,8 @@ import { collection, onSnapshot, query, where, orderBy, limit, writeBatch, doc, 
 import { db }                        from '../utils/firebase'
 import { markRead, markAllRead }     from '../utils/notifications'
 
+const sessionStart = Date.now()
+
 const useNotificationsStore = create((set, get) => ({
   notifications: [],
   loading:       true,
@@ -35,7 +37,11 @@ const useNotificationsStore = create((set, get) => ({
       const hasNewIncoming = snap.docChanges().some(change => {
         if (change.type !== 'added') return false
         const n = change.doc.data()
-        return n && n.status === 'unread'
+        if (!n || n.status !== 'unread') return false
+        const createdTime = n.createdAt?.toMillis
+          ? n.createdAt.toMillis()
+          : (n.createdAt?.seconds ? n.createdAt.seconds * 1000 : (Number(n.createdAt) || 0))
+        return !createdTime || createdTime > sessionStart
       })
 
       if (hasNewIncoming) {
