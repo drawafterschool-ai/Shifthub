@@ -31,6 +31,7 @@ const FormsView         = lazy(() => import('./views/forms/FormsView'))
 // ── Auth guard ────────────────────────────────────────────────────────────────
 function RequireAdmin() {
   const { user, userProfile, loading, profileMissing } = useAuthStore()
+  const { raw: settings } = useSettingsStore()
 
   if (loading) {
     return (
@@ -44,6 +45,33 @@ function RequireAdmin() {
   }
 
   if (!user) return <Navigate to="/login" replace />
+
+  // Check trial expiration
+  const trialExpiresAt = settings?.trialExpiresAt?.seconds 
+    ? settings.trialExpiresAt.seconds * 1000 
+    : (settings?.trialExpiresAt ? new Date(settings.trialExpiresAt).getTime() : null);
+
+  if (trialExpiresAt && Date.now() > trialExpiresAt) {
+    return (
+      <div className="w-screen h-screen flex items-center justify-center bg-app">
+        <div className="max-w-sm text-center bg-card border border-app rounded-2xl p-10">
+          <p className="text-4xl mb-4">⏳</p>
+          <h2 className="text-lg font-bold text-primary mb-2">Trial Period Expired</h2>
+          <p className="text-sm text-muted mb-6 leading-relaxed">
+            Your 30-day trial period has expired. Thank you for trying ShiftHub!
+          </p>
+          <p className="text-xs text-dim mb-6">
+            To reactivate your account, please contact:<br />
+            <span className="font-semibold text-accent font-mono">giordanofontana@gmail.com</span>
+          </p>
+          <button onClick={() => useAuthStore.getState().signOut()}
+            className="px-5 py-2.5 bg-accent text-white rounded-lg text-sm font-semibold cursor-pointer border-none hover:opacity-90">
+            Sign out
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   if (profileMissing) {
     return (
