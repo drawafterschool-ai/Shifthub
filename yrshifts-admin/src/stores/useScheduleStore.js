@@ -116,6 +116,14 @@ const useScheduleStore = create((set, get) => ({
     }
   },
 
+  // ── Confirm Shift (on behalf of teacher) ───────────────────────────
+  async confirmShift(shiftId) {
+    await updateDoc(doc(db, 'shifts', shiftId), {
+      status:             'published',
+      confirmationStatus: 'confirmed',
+    })
+  },
+
   // ── Save (from ShiftPanel) ─────────────────────────────────────────
   async saveShift(updatedShift, dates, action, scope, ctxShift, ctxDateKey, isNew, instructors, sms) {
     const batch = writeBatch(db)
