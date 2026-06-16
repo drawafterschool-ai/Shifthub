@@ -120,7 +120,7 @@ const SELECT = `${INPUT} appearance-none cursor-pointer`
 
 // ── Main ShiftPanel ───────────────────────────────────────────────────────────
 export default function ShiftPanel({ shift, dateKey, isNew, onClose, onSaved, sms }) {
-  const { jobs: rawJobs, saveShift, deleteShift, savedTemplates, saveTemplates } = useScheduleStore()
+  const { jobs: rawJobs, saveShift, deleteShift, confirmShift, savedTemplates, saveTemplates } = useScheduleStore()
   const jobs = rawJobs?.length ? rawJobs : DEFAULT_JOBS
   const { instructors }                  = useDirectoryStore()
   const { payrollTiers }                 = useSettingsStore()
@@ -470,6 +470,16 @@ export default function ShiftPanel({ shift, dateKey, isNew, onClose, onSaved, sm
     } catch (e) { console.error(e); setErr('Error saving shift.') }
   }
 
+  const handleConfirmShift = async () => {
+    setErr('')
+    try {
+      await confirmShift(shift.id)
+      onSaved('✅ Shift confirmed')
+    } catch (e) {
+      console.error(e); setErr('Error confirming shift.')
+    }
+  }
+
   const handleDelete = async (scope) => {
     try {
       const count = await deleteShift(shift, scope, dateKey)
@@ -813,6 +823,11 @@ export default function ShiftPanel({ shift, dateKey, isNew, onClose, onSaved, sm
 
           {/* Footer */}
           <div className="px-6 py-3.5 border-t border-app flex items-center gap-2 flex-shrink-0">
+            {!isNew && shift.instructorId && shift.confirmationStatus !== 'confirmed' && (
+              <Button variant="primary" onClick={handleConfirmShift} disabled={isUploading} icon="✔️">
+                Confirm Shift
+              </Button>
+            )}
             <Button variant="publish" onClick={handlePublish} disabled={isUploading}>
               🔔 Publish{effectiveDates.length > 1 ? ` (${effectiveDates.length})` : ''}
             </Button>
