@@ -2,7 +2,14 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isSignedIn() { return request.auth != null; }
+    function isTrialValid() {
+      let path = /databases/$(database)/documents/settings/company;
+      return !exists(path) 
+        || !('trialExpiresAt' in get(path).data) 
+        || request.time < get(path).data.trialExpiresAt;
+    }
+
+    function isSignedIn() { return request.auth != null && isTrialValid(); }
 
     function userRole() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;

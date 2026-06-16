@@ -3,6 +3,7 @@ import useAuthStore    from './stores/useAuthStore'
 import useTeacherStore from './stores/useTeacherStore'
 import useChatStore    from './stores/useChatStore'
 import useFormsStore   from './stores/useFormsStore'
+import useSettingsStore from './stores/useSettingsStore'
 
 import LoginView    from './views/LoginView'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -190,7 +191,11 @@ export default function App() {
 
   useEffect(() => {
     init()
+    useSettingsStore.getState().init()
     sessionStorage.removeItem('shifthub_teacher_chunk_reload')
+    return () => {
+      useSettingsStore.getState().cleanup()
+    }
   }, [])
 
   useEffect(() => {
@@ -334,8 +339,36 @@ export default function App() {
     }
   }
 
+  const { raw: settings } = useSettingsStore()
+  const trialExpiresAt = settings?.trialExpiresAt?.seconds 
+    ? settings.trialExpiresAt.seconds * 1000 
+    : (settings?.trialExpiresAt ? new Date(settings.trialExpiresAt).getTime() : null);
+
   if (loading)        return <LoadingScreen />
   if (!user)          return <LoginView />
+
+  // Check trial expiration
+  if (trialExpiresAt && Date.now() > trialExpiresAt) {
+    return (
+      <div className="w-screen h-screen flex items-center justify-center bg-app p-6">
+        <div className="max-w-sm text-center bg-card border border-app rounded-2xl p-8">
+          <p className="text-4xl mb-4">⏳</p>
+          <h2 className="text-lg font-bold text-primary mb-2">Trial Period Expired</h2>
+          <p className="text-sm text-muted mb-6 leading-relaxed">
+            Your 30-day trial period has expired. Thank you for trying ShiftHub!
+          </p>
+          <p className="text-xs text-dim mb-6">
+            To reactivate your account, please contact:<br />
+            <span className="font-semibold text-accent font-mono">giordanofontana@gmail.com</span>
+          </p>
+          <button onClick={signOut} className="px-6 py-2.5 bg-accent text-white rounded-xl text-sm font-semibold cursor-pointer border-none hover:opacity-90">
+            Sign out
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   if (profileMissing) return <ProfileMissingScreen onSignOut={signOut} />
 
   return (
