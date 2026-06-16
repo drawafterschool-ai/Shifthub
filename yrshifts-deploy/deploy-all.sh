@@ -80,7 +80,7 @@ else
   echo "📦  Installing Cloud Functions dependencies…"
   (cd "$DEPLOY_DIR/functions" && npm install --silent)
   echo "🚀  Deploying everything…"
-  firebase deploy --only hosting,firestore:rules:rules,functions
+  firebase deploy --only hosting,firestore:rules,functions
 fi
 
 echo ""
