@@ -256,18 +256,39 @@ export default function ChatView() {
   }
 
   const handleSend = async () => {
-    if ((!msgText.trim() && !attachments.length) || !activeChatId || sending) return
+    const textToSend = msgText.trim()
+    const attachmentsToSend = attachments
+    const replyToToSend = replyTo
+    if ((!textToSend && !attachmentsToSend.length) || !activeChatId || sending) return
+
+    // Clear input immediately to make it ready for the next message (optimistic UX)
+    setMsgText('')
+    setAttachments([])
+    setReplyTo(null)
+    
+    // Focus the input box immediately
+    setTimeout(() => {
+      inputRef.current?.focus()
+    }, 0)
+
     setSending(true)
     try {
       await sendMessage(activeChatId, {
-        text:        msgText.trim(),
-        attachments,
-        replyTo,
+        text:        textToSend,
+        attachments: attachmentsToSend,
+        replyTo:     replyToToSend,
         authorId:    user?.uid,
         authorName:  userProfile?.firstName || 'Teacher',
       })
-      setMsgText(''); setAttachments([]); setReplyTo(null)
-    } finally { setSending(false) }
+    } catch (err) {
+      console.error("Failed to send message:", err)
+      // Restore input state if sending fails
+      setMsgText(textToSend)
+      setAttachments(attachmentsToSend)
+      setReplyTo(replyToToSend)
+    } finally {
+      setSending(false)
+    }
   }
 
   const handleForward = async (targetChat) => {
