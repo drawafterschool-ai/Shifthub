@@ -750,32 +750,35 @@ export default function ChatView() {
             </div>
           ) : filteredChats.map(chat => {
             const isActive = chat.id === activeChatId
+            const lastReadTs = user ? (chat.lastRead?.[user.uid]?.seconds || 0) : 0
+            const msgs       = messages[chat.id] || []
+            const unread     = msgs.filter(m => m.authorId !== user?.uid && (m.createdAt?.seconds || 0) > lastReadTs).length
             return (
               <div key={chat.id} className="relative group">
                 <button onClick={() => setActiveChat(chat.id)}
                   className={`flex items-center gap-4 w-full px-5 py-4 text-left cursor-pointer border-none border-b border-app/20 transition-colors
-                    ${isActive ? 'bg-accent-soft' : 'bg-transparent hover:bg-raised'}`}>
-                  {(() => {
-                    const profile = getChatProfile(chat, user, instructors)
-                    return <Avatar firstName={profile.firstName} lastName={profile.lastName} color={profile.color} photo={profile.photo} icon={profile.icon} size={48} />
-                  })()}
+                    ${isActive ? 'bg-accent-soft' : unread > 0 ? 'bg-accent/5 hover:bg-accent/10' : 'bg-transparent hover:bg-raised'}`}>
+                  <div className="relative flex-shrink-0">
+                    {(() => {
+                      const profile = getChatProfile(chat, user, instructors)
+                      return <Avatar firstName={profile.firstName} lastName={profile.lastName} color={profile.color} photo={profile.photo} icon={profile.icon} size={48} />
+                    })()}
+                    {unread > 0 && (
+                      <span className="absolute -top-1 -left-1 w-3 h-3 bg-accent border border-surface rounded-full flex-shrink-0 animate-pulse" />
+                    )}
+                  </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                       {chat.pinnedAt && <span className="text-sm">📌</span>}
                       <p className="text-base font-bold text-primary truncate">{getChatProfile(chat, user, instructors).name}</p>
                     </div>
-                    <p className="text-sm text-dim truncate mt-0.5">{chat.lastMessage || 'No messages yet'}</p>
+                    <p className={`text-sm truncate mt-0.5 ${unread > 0 ? 'font-bold text-primary' : 'text-dim'}`}>{chat.lastMessage || 'No messages yet'}</p>
                   </div>
                   <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                    <span className="text-xs text-dim">{fmtChatTime(chat.lastAt)}</span>
-                    {(() => {
-                      const lastReadTs = user ? (chat.lastRead?.[user.uid]?.seconds || 0) : 0
-                      const msgs       = messages[chat.id] || []
-                      const unread     = msgs.filter(m => m.authorId !== user?.uid && (m.createdAt?.seconds || 0) > lastReadTs).length
-                      return unread > 0 ? (
-                        <span className="min-w-[22px] h-[22px] rounded-full bg-accent text-white text-[11px] font-bold flex items-center justify-center px-1.5">{unread > 9 ? '9+' : unread}</span>
-                      ) : null
-                    })()}
+                    <span className={`text-xs ${unread > 0 ? 'text-accent font-semibold' : 'text-dim'}`}>{fmtChatTime(chat.lastAt)}</span>
+                    {unread > 0 && (
+                      <span className="min-w-[22px] h-[22px] rounded-full bg-accent text-white text-[11px] font-bold flex items-center justify-center px-1.5">{unread > 9 ? '9+' : unread}</span>
+                    )}
                   </div>
                 </button>
                 {/* Hover actions */}
