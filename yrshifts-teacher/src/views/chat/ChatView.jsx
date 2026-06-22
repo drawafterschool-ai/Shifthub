@@ -310,48 +310,54 @@ export default function ChatView() {
             <p className="text-base font-semibold text-muted">No conversations yet</p>
             <p className="text-sm text-dim mt-1 mb-4">Tap ✏️ to message a colleague</p>
           </div>
-        ) : chats.map(chat => (
-          <div key={chat.id} className="relative group">
-            <button onClick={() => openChat(chat.id)}
-              className="flex items-center gap-4 w-full px-5 py-4 text-left cursor-pointer bg-transparent border-none border-b border-app/20 hover:bg-raised transition-colors">
-              {(() => {
-                const profile = getChatProfile(chat, user, instructors)
-                return <Avatar firstName={profile.firstName} lastName={profile.lastName} color={profile.color} photo={profile.photo} icon={profile.icon} size={48} />
-              })()}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
-                  {chat.pinnedAt && <span className="text-sm">📌</span>}
-                  <p className="text-base font-bold text-primary truncate">{getChatProfile(chat, user, instructors).name}</p>
+        ) : chats.map(chat => {
+          const lastReadTs = user ? (chat.lastRead?.[user.uid]?.seconds || 0) : 0
+          const msgs       = messages[chat.id] || []
+          const unread     = msgs.filter(m => m.authorId !== user?.uid && (m.createdAt?.seconds || 0) > lastReadTs).length
+          return (
+            <div key={chat.id} className="relative group">
+              <button onClick={() => openChat(chat.id)}
+                className={`flex items-center gap-4 w-full px-5 py-4 text-left cursor-pointer border-none border-b border-app/20 transition-colors
+                  ${unread > 0 ? 'bg-accent/5 hover:bg-accent/10' : 'bg-transparent hover:bg-raised'}`}>
+                <div className="relative flex-shrink-0">
+                  {(() => {
+                    const profile = getChatProfile(chat, user, instructors)
+                    return <Avatar firstName={profile.firstName} lastName={profile.lastName} color={profile.color} photo={profile.photo} icon={profile.icon} size={48} />
+                  })()}
+                  {unread > 0 && (
+                    <span className="absolute -top-1 -left-1 w-3 h-3 bg-accent border border-surface rounded-full flex-shrink-0 animate-pulse" />
+                  )}
                 </div>
-                <p className="text-sm text-dim truncate mt-0.5">{chat.lastMessage || 'No messages yet'}</p>
-              </div>
-              <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                <span className="text-xs text-dim">{fmtChatTime(chat.lastAt)}</span>
-                {(() => {
-                  const lastReadTs = user ? (chat.lastRead?.[user.uid]?.seconds || 0) : 0
-                  const msgs       = messages[chat.id] || []
-                  const unread     = msgs.filter(m => m.authorId !== user?.uid && (m.createdAt?.seconds || 0) > lastReadTs).length
-                  return unread > 0 ? (
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    {chat.pinnedAt && <span className="text-sm">📌</span>}
+                    <p className="text-base font-bold text-primary truncate">{getChatProfile(chat, user, instructors).name}</p>
+                  </div>
+                  <p className={`text-sm truncate mt-0.5 ${unread > 0 ? 'font-bold text-primary' : 'text-dim'}`}>{chat.lastMessage || 'No messages yet'}</p>
+                </div>
+                <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                  <span className={`text-xs ${unread > 0 ? 'text-accent font-semibold' : 'text-dim'}`}>{fmtChatTime(chat.lastAt)}</span>
+                  {unread > 0 && (
                     <span className="min-w-[22px] h-[22px] rounded-full bg-accent text-white text-[11px] font-bold flex items-center justify-center px-1.5">{unread > 9 ? '9+' : unread}</span>
-                  ) : null
-                })()}
-              </div>
-            </button>
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 hidden group-hover:flex gap-1 bg-card border border-app rounded-lg p-1 z-10">
-              <button onClick={e => { e.stopPropagation(); pinChat(chat.id, !chat.pinnedAt) }}
-                title={chat.pinnedAt ? 'Unpin' : 'Pin'}
-                className="w-7 h-7 rounded-md hover:bg-raised flex items-center justify-center text-sm cursor-pointer bg-transparent border-none">
-                {chat.pinnedAt ? '📌' : '📍'}
+                  )}
+                </div>
               </button>
-              {(chat.createdBy === user?.uid || !chat.createdBy) && (
-                <button onClick={e => { e.stopPropagation(); if (window.confirm('Delete this chat?')) deleteChat(chat.id) }}
-                  className="w-7 h-7 rounded-md hover:bg-danger-soft flex items-center justify-center text-sm cursor-pointer bg-transparent border-none text-danger">
-                  🗑
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 hidden group-hover:flex gap-1 bg-card border border-app rounded-lg p-1 z-10">
+                <button onClick={e => { e.stopPropagation(); pinChat(chat.id, !chat.pinnedAt) }}
+                  title={chat.pinnedAt ? 'Unpin' : 'Pin'}
+                  className="w-7 h-7 rounded-md hover:bg-raised flex items-center justify-center text-sm cursor-pointer bg-transparent border-none text-muted">
+                  {chat.pinnedAt ? '📌' : '📍'}
                 </button>
-              )}
+                {(chat.createdBy === user?.uid || !chat.createdBy) && (
+                  <button onClick={e => { e.stopPropagation(); if (window.confirm('Delete this chat?')) deleteChat(chat.id) }}
+                    className="w-7 h-7 rounded-md hover:bg-danger-soft flex items-center justify-center text-sm cursor-pointer bg-transparent border-none text-danger">
+                    🗑
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
       {/* DM Picker — must be inside showList block */}
