@@ -384,9 +384,12 @@ export default function App() {
       {/* Top bar */}
       <div className="flex items-center justify-between px-4 pb-3 bg-surface border-b border-app flex-shrink-0"
         style={{ paddingTop: 'max(12px, env(safe-area-inset-top, 0px))' }}>
-        <div>
+        <div className="flex items-center gap-2.5">
+          <img src="/app/yr_logo.jpg" alt="YR" className="w-7 h-7 rounded-full object-cover" />
+          <div>
           <p className="text-xs text-muted leading-none">Welcome back</p>
           <p className="text-lg font-bold text-primary leading-tight">{userProfile?.firstName || 'Teacher'}</p>
+        </div>
         </div>
         <div className="flex items-center gap-2">
           <Avatar
