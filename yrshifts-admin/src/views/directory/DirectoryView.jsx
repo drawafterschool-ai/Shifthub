@@ -172,7 +172,7 @@ function InviteModal({ instructor, onClose }) {
 
   return (
     <Modal onClose={onClose} width="max-w-sm">
-      <ModalHeader title={isNew ? "Invite teacher" : "Reset password"} onClose={onClose} />
+      <ModalHeader title={isNew ? "Invite Instructor" : "Reset password"} onClose={onClose} />
 
       {status === 'sent' ? (
         <div className="flex flex-col gap-4">
@@ -445,7 +445,7 @@ export default function DirectoryView() {
         )}
 
         <div className="flex-1" />
-        <Button small icon="📧" onClick={() => setInviting({})}>Invite teacher</Button>
+        <Button small icon="📧" onClick={() => setInviting({})}>Invite Instructor</Button>
         <Button variant="primary" small icon="+" onClick={() => setShowAdd(true)}>Add instructor</Button>
       </div>
 
