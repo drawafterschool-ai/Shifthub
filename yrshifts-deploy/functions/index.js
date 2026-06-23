@@ -357,6 +357,14 @@ exports.onNotificationCreated = onDocumentCreated({ document: 'notifications/{no
   const snap = await db.collection('users').doc(notif.recipientId).get()
   if (!snap.exists) return
   const user = { id: notif.recipientId, ...snap.data() }
+
+  // Prevent duplicate external alerts for shift assignments and edits.
+  // Shift assignment and edit notifications for teachers are already delivered with detailed calendar (.ics) attachments via the onShiftChanged trigger.
+  if (notif.type === 'shift_assigned') {
+    console.log(`Skipping external delivery for shift_assigned notification ${event.params.notifId} to avoid duplication. (Handled by onShiftChanged)`)
+    return
+  }
+
   await deliver(user, buildSubject(notif), buildBody(notif))
 })
 
