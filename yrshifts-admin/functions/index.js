@@ -202,7 +202,7 @@ exports.onShiftChanged = onDocumentWritten(
 
     // Edited
     if (before?.instructorId && after.instructorId === before.instructorId) {
-      const changed = ['date','start','end','title','address','note','students','attachments'].filter(
+      const changed = ['date','start','end','title','address','note','students','attachments','job'].filter(
         f => JSON.stringify(before[f]) !== JSON.stringify(after[f])
       )
       if (!changed.length) return
