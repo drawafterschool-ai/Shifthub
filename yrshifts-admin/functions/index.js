@@ -189,7 +189,7 @@ exports.onShiftChanged = onDocumentWritten(
     if (!after.instructorId || after.claimable) return
 
     // Newly assigned
-    if (!before?.instructorId && after.instructorId) {
+    if (after.instructorId && after.instructorId !== before?.instructorId) {
       const snap = await db.collection('users').doc(after.instructorId).get()
       if (!snap.exists) return
       const user = { id: after.instructorId, ...snap.data() }
