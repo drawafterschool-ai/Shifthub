@@ -465,7 +465,7 @@ exports.onShiftChanged = onDocumentWritten({ document: 'shifts/{shiftId}', secre
   }
 
   // ── 3. Newly Assigned (Direct assignment, not open claim) ─────────────────
-  if (!wasAssigned && nowAssigned) {
+  if (nowAssigned && nowAssigned !== wasAssigned) {
     if (after.claimable) return   // open/unassigned — handled separately
     const snap = await db.collection('users').doc(nowAssigned).get()
     if (!snap.exists) return

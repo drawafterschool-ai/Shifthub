@@ -177,7 +177,7 @@ exports.onShiftChanged = onDocumentWritten('shifts/{shiftId}', async (event) => 
   const nowAssigned  = after.instructorId
   if (!nowAssigned || after.claimable) return   // open/unassigned — handled separately
 
-  if (!wasAssigned && nowAssigned) {
+  if (nowAssigned && nowAssigned !== wasAssigned) {
     const snap = await db.collection('users').doc(nowAssigned).get()
     if (!snap.exists) return
     const user    = { id: nowAssigned, ...snap.data() }

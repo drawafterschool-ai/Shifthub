@@ -138,7 +138,8 @@ const useScheduleStore = create((set, get) => ({
         updatedShift.instructorId = null
         updatedShift.confirmationStatus = null
       } else if (updatedShift.instructorId) {
-        if (wasConfirmed && !dayOrTimeChanged) {
+        const instructorChanged = ctxShift && (updatedShift.instructorId !== ctxShift.instructorId)
+        if (wasConfirmed && !dayOrTimeChanged && !instructorChanged) {
           updatedShift.confirmationStatus = 'confirmed'
         } else {
           updatedShift.confirmationStatus = 'pending'
@@ -158,7 +159,8 @@ const useScheduleStore = create((set, get) => ({
               sConfirmationStatus = null
             } else if (updatedShift.instructorId) {
               const sWasConfirmed = s.confirmationStatus === 'confirmed'
-              if (sWasConfirmed && !dayOrTimeChanged) {
+              const instructorChanged = s.instructorId !== updatedShift.instructorId
+              if (sWasConfirmed && !dayOrTimeChanged && !instructorChanged) {
                 sConfirmationStatus = 'confirmed'
               } else {
                 sConfirmationStatus = 'pending'
