@@ -12,6 +12,22 @@ import Modal, { ModalHeader, ModalFooter } from '../../components/Modal'
 const COLOURS = ['#6366F1','#0EA5E9','#10B981','#EC4899','#F59E0B',
                  '#EF4444','#8B5CF6','#14B8A6','#F97316','#06B6D4']
 
+const formatLastLogin = (lastLoginAt) => {
+  if (!lastLoginAt) return 'Never'
+  const date = lastLoginAt?.seconds
+    ? new Date(lastLoginAt.seconds * 1000)
+    : new Date(lastLoginAt)
+  if (isNaN(date.getTime())) return 'Never'
+  return date.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  })
+}
+
 function ColourPicker({ value, onChange }) {
   return (
     <div className="flex flex-wrap gap-2 mt-1.5">
@@ -310,11 +326,12 @@ function MessageModal({ recipients, onClose, onSend }) {
 
 // ── Main view ──────────────────────────────────────────────────────────────────
 const COLS = [
-  { key: 'firstName', label: 'First name' },
-  { key: 'lastName',  label: 'Last name'  },
-  { key: 'role',      label: 'Role'       },
-  { key: 'email',     label: 'Email'      },
-  { key: 'phone',     label: 'Phone', align: 'right' },
+  { key: 'firstName',   label: 'First name' },
+  { key: 'lastName',    label: 'Last name'  },
+  { key: 'role',        label: 'Role'       },
+  { key: 'email',       label: 'Email'      },
+  { key: 'phone',       label: 'Phone', align: 'right' },
+  { key: 'lastLoginAt', label: 'Last Login' },
 ]
 
 export default function DirectoryView() {
@@ -347,8 +364,19 @@ export default function DirectoryView() {
     }
     if (sortCol) {
       list = [...list].sort((a, b) => {
-        const av = (a[sortCol] || '').toLowerCase()
-        const bv = (b[sortCol] || '').toLowerCase()
+        if (sortCol === 'lastLoginAt') {
+          const getMs = (val) => {
+            if (!val) return 0
+            if (val.seconds) return val.seconds * 1000
+            const d = new Date(val)
+            return isNaN(d.getTime()) ? 0 : d.getTime()
+          }
+          const av = getMs(a[sortCol])
+          const bv = getMs(b[sortCol])
+          return sortDir === 'asc' ? av - bv : bv - av
+        }
+        const av = String(a[sortCol] || '').toLowerCase()
+        const bv = String(b[sortCol] || '').toLowerCase()
         return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av)
       })
     }
@@ -491,14 +519,15 @@ export default function DirectoryView() {
                       onUpload={url => updateInstructor(inst.id, { photo: url })} />
                   </td>
                   {COLS.map(col => {
-                    const editable  = col.key !== 'role'
+                    const editable  = col.key !== 'role' && col.key !== 'lastLoginAt'
                     const isEditing = editCell?.id === inst.id && editCell?.field === col.key
                     let display = inst[col.key]
                     if (col.key === 'phone') display = formatPhone(display)
                     if (col.key === 'role')  display = display || 'teacher'
+                    if (col.key === 'lastLoginAt') display = formatLastLogin(display)
                     return (
                       <td key={col.key}
-                        className={`px-4 py-2.5 ${col.align === 'right' ? 'text-right font-mono' : ''} ${col.key === 'email' ? 'text-muted' : 'text-primary'}`}
+                        className={`px-4 py-2.5 ${col.align === 'right' ? 'text-right font-mono' : ''} ${col.key === 'email' || col.key === 'lastLoginAt' ? 'text-muted' : 'text-primary'}`}
                         onDoubleClick={() => { if (editable) setEditCell({ id: inst.id, field: col.key }) }}>
                         {isEditing ? (
                           <input defaultValue={inst[col.key]} autoFocus
