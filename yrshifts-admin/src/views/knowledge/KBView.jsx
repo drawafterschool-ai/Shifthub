@@ -24,34 +24,119 @@ function AddNodeModal({ parentId, onClose, onCreate }) {
   const [kind,  setKind]  = useState('file')
   const [name,  setName]  = useState('')
   const [url,   setUrl]   = useState('')
-  const [file,  setFile]  = useState(null)
+  const [selectedFiles, setSelectedFiles] = useState([])
+  const [isFolderUpload, setIsFolderUpload] = useState(false)
   const [busy,  setBusy]  = useState(false)
   const [error, setError] = useState(null)
-  const fileRef = useRef(null)
+  
+  const filesRef = useRef(null)
+  const folderRef = useRef(null)
 
   const INPUT = "w-full bg-raised border border-app rounded-lg px-3 py-2.5 text-sm text-primary placeholder:text-dim outline-none focus:border-accent transition-colors"
 
-  const handleFileChange = (e) => {
-    const f = e.target.files[0]; if (!f) return
-    setFile(f)
-    if (!name) setName(f.name.replace(/\.[^.]+$/, ''))
+  const handleFilesChange = (e) => {
+    const fList = Array.from(e.target.files)
+    if (fList.length === 0) return
+    setSelectedFiles(fList)
+    setIsFolderUpload(false)
+    if (fList.length === 1) {
+      setName(fList[0].name.replace(/\.[^.]+$/, ''))
+    } else {
+      setName('')
+    }
+    setError(null)
+  }
+
+  const handleFolderChange = (e) => {
+    const fList = Array.from(e.target.files)
+    if (fList.length === 0) return
+    setSelectedFiles(fList)
+    setIsFolderUpload(true)
+    const rootFolder = fList[0]?.webkitRelativePath.split('/')[0] || ''
+    setName(rootFolder)
+    setError(null)
   }
 
   const handleCreate = async () => {
-    const finalName = name.trim() || (file ? file.name.replace(/\.[^.]+$/, '') : '')
-    if (!finalName) return
+    const finalName = name.trim()
+    if (kind === 'folder' && !finalName) return
+    if (kind === 'link' && (!finalName || !url.trim())) return
+    if (kind === 'file' && selectedFiles.length === 0) return
+
     setBusy(true)
     setError(null)
     try {
-      let node = { name: finalName, type: kind, parentId: parentId || null, order: Date.now(), createdAt: serverTimestamp() }
-      if (kind === 'link') node.url = url.trim()
-      if (kind === 'file' && file) {
-        const snap = await uploadBytes(stRef(storage, `kb/${uid()}_${file.name}`), file)
-        node.url      = await getDownloadURL(snap.ref)
-        node.mimeType = file.type
-        node.size     = file.size
+      if (kind === 'folder') {
+        let node = { name: finalName, type: 'folder', order: Date.now(), createdAt: serverTimestamp() }
+        await onCreate(node)
+      } else if (kind === 'link') {
+        let node = { name: finalName, type: 'link', url: url.trim(), order: Date.now(), createdAt: serverTimestamp() }
+        await onCreate(node)
+      } else if (kind === 'file') {
+        if (isFolderUpload) {
+          // Folder upload: reconstruct structure
+          const pathCache = {}
+          for (const file of selectedFiles) {
+            const parts = file.webkitRelativePath ? file.webkitRelativePath.split('/') : []
+            let currentParentId = parentId || null
+            
+            // Create nested folders
+            for (let depth = 0; depth < parts.length - 1; depth++) {
+              const folderName = parts[depth]
+              const pathKey = parts.slice(0, depth + 1).join('/')
+              
+              if (!pathCache[pathKey]) {
+                const newFolderNode = {
+                  name: folderName,
+                  type: 'folder',
+                  parentId: currentParentId,
+                  order: Date.now(),
+                  createdAt: serverTimestamp()
+                }
+                const docRef = await addDoc(collection(db, 'kb_nodes'), newFolderNode)
+                pathCache[pathKey] = docRef.id
+              }
+              currentParentId = pathCache[pathKey]
+            }
+            
+            // Upload the file
+            const snap = await uploadBytes(stRef(storage, `kb/${uid()}_${file.name}`), file)
+            const downloadUrl = await getDownloadURL(snap.ref)
+            const fileNode = {
+              name: file.name.replace(/\.[^.]+$/, ''),
+              type: 'file',
+              parentId: currentParentId,
+              order: Date.now(),
+              createdAt: serverTimestamp(),
+              url: downloadUrl,
+              mimeType: file.type,
+              size: file.size
+            }
+            await addDoc(collection(db, 'kb_nodes'), fileNode)
+          }
+        } else {
+          // Multiple or single file upload (flat)
+          for (const file of selectedFiles) {
+            const snap = await uploadBytes(stRef(storage, `kb/${uid()}_${file.name}`), file)
+            const downloadUrl = await getDownloadURL(snap.ref)
+            const fileDisplayName = (selectedFiles.length === 1 && finalName) 
+              ? finalName 
+              : file.name.replace(/\.[^.]+$/, '')
+            
+            const fileNode = {
+              name: fileDisplayName,
+              type: 'file',
+              parentId: parentId || null,
+              order: Date.now(),
+              createdAt: serverTimestamp(),
+              url: downloadUrl,
+              mimeType: file.type,
+              size: file.size
+            }
+            await onCreate(fileNode)
+          }
+        }
       }
-      await onCreate(node)
       onClose()
     } catch (err) {
       console.error("Error creating KB node:", err)
@@ -59,65 +144,101 @@ function AddNodeModal({ parentId, onClose, onCreate }) {
     } finally { setBusy(false) }
   }
 
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    if (canSubmit && !busy) {
+      handleCreate()
+    }
+  }
+
   const canSubmit = kind === 'folder'
     ? name.trim()
     : kind === 'link'
       ? name.trim() && url.trim()
-      : file
+      : selectedFiles.length > 0
 
   return (
     <Modal onClose={onClose}>
       <ModalHeader title="Add item" onClose={onClose} />
-      <div className="flex rounded-xl border border-app overflow-hidden mb-4">
-        {[['folder','📁 Folder'],['file','📄 File'],['link','🔗 Link']].map(([k,label]) => (
-          <button key={k} onClick={() => { setKind(k); setName(''); setFile(null); setError(null) }}
-            className={`flex-1 py-2 text-sm font-semibold cursor-pointer border-none transition-colors
-               ${kind===k ? 'bg-accent text-white' : 'bg-transparent text-muted hover:text-primary'}`}>{label}</button>
-        ))}
-      </div>
-      <div className="flex flex-col gap-3">
-        {(kind === 'folder' || kind === 'link') && (
-          <div>
-            <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1">Name *</label>
-            <input value={name} onChange={e => setName(e.target.value)} autoFocus className={INPUT}
-              placeholder={kind === 'folder' ? 'e.g. Spring Resources' : 'e.g. Google Drive'} />
-          </div>
-        )}
-        {kind === 'link' && (
-          <div>
-            <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1">URL *</label>
-            <input value={url} onChange={e => setUrl(e.target.value)} className={INPUT} placeholder="https://…" />
-          </div>
-        )}
-        {kind === 'file' && (
-          <div>
-            <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1">File *</label>
-            <input ref={fileRef} type="file" className="hidden" onChange={handleFileChange} />
-            <button onClick={() => fileRef.current?.click()}
-              className="w-full border-2 border-dashed border-app rounded-xl py-6 text-sm text-muted hover:border-accent hover:text-accent transition-colors cursor-pointer bg-transparent">
-              {file ? `📎 ${file.name}` : '+ Click to upload file'}
-            </button>
-            {file && (
-              <div className="mt-2">
-                <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1">Display name (optional)</label>
-                <input value={name} onChange={e => setName(e.target.value)} className={INPUT}
-                  placeholder={file.name.replace(/\.[^.]+$/, '')} />
+      <form onSubmit={handleSubmit}>
+        <div className="flex rounded-xl border border-app overflow-hidden mb-4">
+          {[['folder','📁 Folder'],['file','📄 File'],['link','🔗 Link']].map(([k,label]) => (
+            <button key={k} type="button" onClick={() => { setKind(k); setName(''); setSelectedFiles([]); setError(null) }}
+              className={`flex-1 py-2 text-sm font-semibold cursor-pointer border-none transition-colors
+                 ${kind===k ? 'bg-accent text-white' : 'bg-transparent text-muted hover:text-primary'}`}>{label}</button>
+          ))}
+        </div>
+        <div className="flex flex-col gap-3">
+          {(kind === 'folder' || kind === 'link') && (
+            <div>
+              <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1">Name *</label>
+              <input value={name} onChange={e => setName(e.target.value)} autoFocus className={INPUT}
+                placeholder={kind === 'folder' ? 'e.g. Spring Resources' : 'e.g. Google Drive'} />
+            </div>
+          )}
+          {kind === 'link' && (
+            <div>
+              <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1">URL *</label>
+              <input value={url} onChange={e => setUrl(e.target.value)} className={INPUT} placeholder="https://…" />
+            </div>
+          )}
+          {kind === 'file' && (
+            <div className="flex flex-col gap-3">
+              <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1">Upload *</label>
+              <input ref={filesRef} type="file" multiple className="hidden" onChange={handleFilesChange} />
+              <input ref={folderRef} type="file" webkitdirectory="" directory="" className="hidden" onChange={handleFolderChange} />
+              
+              <div className="flex gap-3">
+                <button type="button" onClick={() => filesRef.current?.click()}
+                  className="flex-1 border-2 border-dashed border-app rounded-xl py-6 text-sm text-muted hover:border-accent hover:text-accent transition-colors cursor-pointer bg-transparent flex flex-col items-center justify-center gap-1.5">
+                  <span className="text-2xl">📄</span>
+                  <span>Upload Files</span>
+                </button>
+                <button type="button" onClick={() => folderRef.current?.click()}
+                  className="flex-1 border-2 border-dashed border-app rounded-xl py-6 text-sm text-muted hover:border-accent hover:text-accent transition-colors cursor-pointer bg-transparent flex flex-col items-center justify-center gap-1.5">
+                  <span className="text-2xl">📁</span>
+                  <span>Upload Folder</span>
+                </button>
               </div>
-            )}
-          </div>
-        )}
-        {error && (
-          <p className="text-xs text-danger font-semibold mt-1">
-            ❌ {error}
-          </p>
-        )}
-      </div>
-      <ModalFooter>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button variant="primary" onClick={handleCreate} disabled={busy || !canSubmit}>
-          {busy ? 'Adding…' : 'Add'}
-        </Button>
-      </ModalFooter>
+
+              {selectedFiles.length > 0 && (
+                <div className="bg-raised border border-app rounded-xl p-3 text-xs text-muted flex flex-col gap-1 max-h-32 overflow-y-auto">
+                  <p className="font-semibold text-primary mb-1">
+                    {isFolderUpload ? `Folder: ${name}` : `${selectedFiles.length} file(s) selected:`}
+                  </p>
+                  {selectedFiles.slice(0, 5).map((f, idx) => (
+                    <span key={idx} className="truncate">
+                      📎 {isFolderUpload ? f.webkitRelativePath : f.name}
+                    </span>
+                  ))}
+                  {selectedFiles.length > 5 && (
+                    <span className="text-dim italic">...and {selectedFiles.length - 5} more</span>
+                  )}
+                </div>
+              )}
+
+              {selectedFiles.length === 1 && !isFolderUpload && (
+                <div>
+                  <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1">Display name (optional)</label>
+                  <input value={name} onChange={e => setName(e.target.value)} className={INPUT}
+                    placeholder={selectedFiles[0].name.replace(/\.[^.]+$/, '')} />
+                </div>
+              )}
+            </div>
+          )}
+          {error && (
+            <p className="text-xs text-danger font-semibold mt-1">
+              ❌ {error}
+            </p>
+          )}
+        </div>
+        <ModalFooter>
+          <Button type="button" onClick={onClose}>Cancel</Button>
+          <Button type="submit" variant="primary" disabled={busy || !canSubmit}>
+            {busy ? 'Adding…' : 'Add'}
+          </Button>
+        </ModalFooter>
+      </form>
     </Modal>
   )
 }
@@ -187,7 +308,7 @@ export default function KBView() {
   const navTo      = (idx)  => setCrumbs(c => c.slice(0, idx + 1))
 
   const handleAdd = async (node) => {
-    await addDoc(collection(db, 'kb_nodes'), { ...node, parentId: currentId })
+    await addDoc(collection(db, 'kb_nodes'), { parentId: currentId, ...node })
   }
 
   const handleDelete = async (id) => {
