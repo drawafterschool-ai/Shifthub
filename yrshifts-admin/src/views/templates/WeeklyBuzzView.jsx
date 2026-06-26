@@ -125,9 +125,9 @@ function RichEditor({ value, onChange, background }) {
   const TOOL_BTN = "px-2.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer bg-transparent border-none text-muted hover:bg-card hover:text-primary transition-colors"
 
   return (
-    <div className="border border-app rounded-xl overflow-visible">
-      {/* Toolbar — scrollable on narrow screens */}
-      <div className="flex gap-0.5 p-1.5 border-b border-app bg-raised items-center overflow-x-auto" style={{ flexWrap: 'nowrap', minWidth: 0 }}>
+    <div className="border border-app rounded-xl overflow-visible relative">
+      {/* Toolbar — wraps on narrow screens to prevent overflow clipping */}
+      <div className="flex flex-wrap gap-0.5 p-1.5 border-b border-app bg-raised items-center overflow-visible">
         {/* Format */}
         <button className={`${TOOL_BTN} font-bold flex-shrink-0`}   onMouseDown={e => { e.preventDefault(); exec('bold') }}>B</button>
         <button className={`${TOOL_BTN} italic flex-shrink-0`}       onMouseDown={e => { e.preventDefault(); exec('italic') }}>I</button>
@@ -160,7 +160,7 @@ function RichEditor({ value, onChange, background }) {
           {showColorPick && (
             <>
               <div onClick={() => setShowColorPick(false)} className="fixed inset-0 z-10" />
-              <div className="absolute top-full left-0 mt-1 z-20 bg-card border border-app rounded-xl p-3 shadow-xl w-48">
+              <div className="absolute top-full left-0 mt-1 z-50 bg-card border border-app rounded-xl p-3 shadow-xl w-48">
                 <p className="text-2xs text-dim uppercase tracking-wide font-semibold mb-2">Text color</p>
                 <div className="grid grid-cols-4 gap-1.5">
                   {TEXT_COLORS.map(c => (
@@ -183,7 +183,7 @@ function RichEditor({ value, onChange, background }) {
           {showLink && (
             <>
               <div onClick={() => setShowLink(false)} className="fixed inset-0 z-10" />
-              <div className="absolute top-full left-0 mt-1 z-20 bg-card border border-app rounded-xl p-3 shadow-xl w-72 flex flex-col gap-2">
+              <div className="absolute top-full left-0 mt-1 z-50 bg-card border border-app rounded-xl p-3 shadow-xl w-72 flex flex-col gap-2">
                 <input value={linkText} onChange={e => setLinkText(e.target.value)} placeholder="Link text (optional)"
                   className="w-full bg-raised border border-app rounded-lg px-3 py-2 text-xs text-primary outline-none focus:border-accent" />
                 <input value={linkUrl} onChange={e => setLinkUrl(e.target.value)} placeholder="https://…"
@@ -204,7 +204,7 @@ function RichEditor({ value, onChange, background }) {
           {showEmoji && (
             <>
               <div onClick={() => setShowEmoji(false)} className="fixed inset-0 z-10" />
-              <div className="absolute top-full left-0 mt-1 z-20 bg-card border border-app rounded-xl p-3 shadow-xl w-64">
+              <div className="absolute top-full left-0 mt-1 z-50 bg-card border border-app rounded-xl p-3 shadow-xl w-64">
                 {EMOJI_GROUPS.map(g => (
                   <div key={g.label} className="mb-2 last:mb-0">
                     <p className="text-2xs text-dim uppercase tracking-wide font-semibold mb-1.5">{g.label}</p>
