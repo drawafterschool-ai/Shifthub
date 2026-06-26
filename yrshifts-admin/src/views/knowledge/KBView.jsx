@@ -19,6 +19,23 @@ function getType(node) {
   return 'file'
 }
 
+// ── Concurrency helper ────────────────────────────────────────────────────────
+async function runWithConcurrency(tasks, limit) {
+  const results = []
+  const executing = new Set()
+  for (const task of tasks) {
+    const p = task()
+    results.push(p)
+    executing.add(p)
+    const clean = () => executing.delete(p)
+    p.then(clean, clean)
+    if (executing.size >= limit) {
+      await Promise.race(executing)
+    }
+  }
+  return Promise.all(results)
+}
+
 // ── Add node modal ─────────────────────────────────────────────────────────────
 function AddNodeModal({ parentId, onClose, onCreate }) {
   const [kind,  setKind]  = useState('file')
@@ -28,6 +45,7 @@ function AddNodeModal({ parentId, onClose, onCreate }) {
   const [isFolderUpload, setIsFolderUpload] = useState(false)
   const [busy,  setBusy]  = useState(false)
   const [error, setError] = useState(null)
+  const [uploadedCount, setUploadedCount] = useState(0)
   
   const filesRef = useRef(null)
   const folderRef = useRef(null)
@@ -65,6 +83,7 @@ function AddNodeModal({ parentId, onClose, onCreate }) {
 
     setBusy(true)
     setError(null)
+    setUploadedCount(0)
     try {
       if (kind === 'folder') {
         let node = { name: finalName, type: 'folder', order: Date.now(), createdAt: serverTimestamp() }
@@ -75,31 +94,52 @@ function AddNodeModal({ parentId, onClose, onCreate }) {
       } else if (kind === 'file') {
         if (isFolderUpload) {
           // Folder upload: reconstruct structure
-          const pathCache = {}
+          const uniqueFolders = new Set()
           for (const file of selectedFiles) {
             const parts = file.webkitRelativePath ? file.webkitRelativePath.split('/') : []
-            let currentParentId = parentId || null
-            
-            // Create nested folders
             for (let depth = 0; depth < parts.length - 1; depth++) {
-              const folderName = parts[depth]
               const pathKey = parts.slice(0, depth + 1).join('/')
-              
-              if (!pathCache[pathKey]) {
-                const newFolderNode = {
-                  name: folderName,
-                  type: 'folder',
-                  parentId: currentParentId,
-                  order: Date.now(),
-                  createdAt: serverTimestamp()
-                }
-                const docRef = await addDoc(collection(db, 'kb_nodes'), newFolderNode)
-                pathCache[pathKey] = docRef.id
-              }
-              currentParentId = pathCache[pathKey]
+              uniqueFolders.add(pathKey)
+            }
+          }
+
+          // Sort folders by depth (number of segments)
+          const sortedFolders = Array.from(uniqueFolders).sort((a, b) => {
+            return a.split('/').length - b.split('/').length
+          })
+
+          // Create folders sequentially to resolve parent IDs
+          const pathCache = {}
+          for (const pathKey of sortedFolders) {
+            const parts = pathKey.split('/')
+            const folderName = parts[parts.length - 1]
+            
+            let currentParentId = parentId || null
+            if (parts.length > 1) {
+              const parentPathKey = parts.slice(0, -1).join('/')
+              currentParentId = pathCache[parentPathKey] || parentId || null
             }
             
-            // Upload the file
+            const newFolderNode = {
+              name: folderName,
+              type: 'folder',
+              parentId: currentParentId,
+              order: Date.now(),
+              createdAt: serverTimestamp()
+            }
+            const docRef = await addDoc(collection(db, 'kb_nodes'), newFolderNode)
+            pathCache[pathKey] = docRef.id
+          }
+
+          // Upload files in parallel using concurrency helper
+          const uploadTasks = selectedFiles.map(file => async () => {
+            const parts = file.webkitRelativePath ? file.webkitRelativePath.split('/') : []
+            let currentParentId = parentId || null
+            if (parts.length > 1) {
+              const parentPathKey = parts.slice(0, -1).join('/')
+              currentParentId = pathCache[parentPathKey] || parentId || null
+            }
+
             const snap = await uploadBytes(stRef(storage, `kb/${uid()}_${file.name}`), file)
             const downloadUrl = await getDownloadURL(snap.ref)
             const fileNode = {
@@ -113,10 +153,13 @@ function AddNodeModal({ parentId, onClose, onCreate }) {
               size: file.size
             }
             await addDoc(collection(db, 'kb_nodes'), fileNode)
-          }
+            setUploadedCount(prev => prev + 1)
+          })
+
+          await runWithConcurrency(uploadTasks, 5)
         } else {
-          // Multiple or single file upload (flat)
-          for (const file of selectedFiles) {
+          // Multiple or single file upload (flat) in parallel
+          const uploadTasks = selectedFiles.map(file => async () => {
             const snap = await uploadBytes(stRef(storage, `kb/${uid()}_${file.name}`), file)
             const downloadUrl = await getDownloadURL(snap.ref)
             const fileDisplayName = (selectedFiles.length === 1 && finalName) 
@@ -134,7 +177,10 @@ function AddNodeModal({ parentId, onClose, onCreate }) {
               size: file.size
             }
             await onCreate(fileNode)
-          }
+            setUploadedCount(prev => prev + 1)
+          })
+
+          await runWithConcurrency(uploadTasks, 5)
         }
       }
       onClose()
@@ -157,88 +203,115 @@ function AddNodeModal({ parentId, onClose, onCreate }) {
       ? name.trim() && url.trim()
       : selectedFiles.length > 0
 
+  const isUploading = busy && kind === 'file'
+
   return (
-    <Modal onClose={onClose}>
-      <ModalHeader title="Add item" onClose={onClose} />
-      <form onSubmit={handleSubmit}>
-        <div className="flex rounded-xl border border-app overflow-hidden mb-4">
-          {[['folder','📁 Folder'],['file','📄 File'],['link','🔗 Link']].map(([k,label]) => (
-            <button key={k} type="button" onClick={() => { setKind(k); setName(''); setSelectedFiles([]); setError(null) }}
-              className={`flex-1 py-2 text-sm font-semibold cursor-pointer border-none transition-colors
-                 ${kind===k ? 'bg-accent text-white' : 'bg-transparent text-muted hover:text-primary'}`}>{label}</button>
-          ))}
+    <Modal onClose={busy ? undefined : onClose}>
+      {isUploading ? (
+        <div className="flex flex-col items-center justify-center py-8 px-4 animate-fade-in">
+          {/* Animated Spinner */}
+          <div className="relative w-14 h-14 mb-4">
+            <div className="w-14 h-14 border-4 border-app rounded-full opacity-20"></div>
+            <div className="absolute top-0 left-0 w-14 h-14 border-4 border-t-accent border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin"></div>
+          </div>
+          <h3 className="text-base font-semibold text-primary mb-1">
+            Uploading {isFolderUpload ? 'Folder' : 'Files'}...
+          </h3>
+          <p className="text-xs text-muted mb-4 text-center max-w-xs">
+            {isFolderUpload ? 'Creating folder structure and uploading files' : 'Uploading files to Knowledge Base'}
+          </p>
+          <div className="w-full bg-raised rounded-full h-2 mb-2 overflow-hidden border border-app">
+            <div 
+              className="bg-accent h-2 rounded-full transition-all duration-300"
+              style={{ width: `${selectedFiles.length > 0 ? (uploadedCount / selectedFiles.length) * 100 : 0}%` }}
+            ></div>
+          </div>
+          <span className="text-xs font-semibold text-accent animate-pulse">
+            {uploadedCount} of {selectedFiles.length} files ({selectedFiles.length > 0 ? Math.round((uploadedCount / selectedFiles.length) * 100) : 0}%)
+          </span>
         </div>
-        <div className="flex flex-col gap-3">
-          {(kind === 'folder' || kind === 'link') && (
-            <div>
-              <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1">Name *</label>
-              <input value={name} onChange={e => setName(e.target.value)} autoFocus className={INPUT}
-                placeholder={kind === 'folder' ? 'e.g. Spring Resources' : 'e.g. Google Drive'} />
-            </div>
-          )}
-          {kind === 'link' && (
-            <div>
-              <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1">URL *</label>
-              <input value={url} onChange={e => setUrl(e.target.value)} className={INPUT} placeholder="https://…" />
-            </div>
-          )}
-          {kind === 'file' && (
-            <div className="flex flex-col gap-3">
-              <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1">Upload *</label>
-              <input ref={filesRef} type="file" multiple className="hidden" onChange={handleFilesChange} />
-              <input ref={folderRef} type="file" webkitdirectory="" directory="" className="hidden" onChange={handleFolderChange} />
-              
-              <div className="flex gap-3">
-                <button type="button" onClick={() => filesRef.current?.click()}
-                  className="flex-1 border-2 border-dashed border-app rounded-xl py-6 text-sm text-muted hover:border-accent hover:text-accent transition-colors cursor-pointer bg-transparent flex flex-col items-center justify-center gap-1.5">
-                  <span className="text-2xl">📄</span>
-                  <span>Upload Files</span>
-                </button>
-                <button type="button" onClick={() => folderRef.current?.click()}
-                  className="flex-1 border-2 border-dashed border-app rounded-xl py-6 text-sm text-muted hover:border-accent hover:text-accent transition-colors cursor-pointer bg-transparent flex flex-col items-center justify-center gap-1.5">
-                  <span className="text-2xl">📁</span>
-                  <span>Upload Folder</span>
-                </button>
+      ) : (
+        <form onSubmit={handleSubmit}>
+          <ModalHeader title="Add item" onClose={onClose} />
+          <div className="flex rounded-xl border border-app overflow-hidden mb-4">
+            {[['folder','📁 Folder'],['file','📄 File'],['link','🔗 Link']].map(([k,label]) => (
+              <button key={k} type="button" onClick={() => { setKind(k); setName(''); setSelectedFiles([]); setError(null) }}
+                className={`flex-1 py-2 text-sm font-semibold cursor-pointer border-none transition-colors
+                   ${kind===k ? 'bg-accent text-white' : 'bg-transparent text-muted hover:text-primary'}`}>{label}</button>
+            ))}
+          </div>
+          <div className="flex flex-col gap-3">
+            {(kind === 'folder' || kind === 'link') && (
+              <div>
+                <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1">Name *</label>
+                <input value={name} onChange={e => setName(e.target.value)} autoFocus className={INPUT}
+                  placeholder={kind === 'folder' ? 'e.g. Spring Resources' : 'e.g. Google Drive'} />
               </div>
-
-              {selectedFiles.length > 0 && (
-                <div className="bg-raised border border-app rounded-xl p-3 text-xs text-muted flex flex-col gap-1 max-h-32 overflow-y-auto">
-                  <p className="font-semibold text-primary mb-1">
-                    {isFolderUpload ? `Folder: ${name}` : `${selectedFiles.length} file(s) selected:`}
-                  </p>
-                  {selectedFiles.slice(0, 5).map((f, idx) => (
-                    <span key={idx} className="truncate">
-                      📎 {isFolderUpload ? f.webkitRelativePath : f.name}
-                    </span>
-                  ))}
-                  {selectedFiles.length > 5 && (
-                    <span className="text-dim italic">...and {selectedFiles.length - 5} more</span>
-                  )}
+            )}
+            {kind === 'link' && (
+              <div>
+                <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1">URL *</label>
+                <input value={url} onChange={e => setUrl(e.target.value)} className={INPUT} placeholder="https://…" />
+              </div>
+            )}
+            {kind === 'file' && (
+              <div className="flex flex-col gap-3">
+                <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1">Upload *</label>
+                <input ref={filesRef} type="file" multiple className="hidden" onChange={handleFilesChange} />
+                <input ref={folderRef} type="file" webkitdirectory="" directory="" className="hidden" onChange={handleFolderChange} />
+                
+                <div className="flex gap-3">
+                  <button type="button" onClick={() => filesRef.current?.click()}
+                    className="flex-1 border-2 border-dashed border-app rounded-xl py-6 text-sm text-muted hover:border-accent hover:text-accent transition-colors cursor-pointer bg-transparent flex flex-col items-center justify-center gap-1.5">
+                    <span className="text-2xl">📄</span>
+                    <span>Upload Files</span>
+                  </button>
+                  <button type="button" onClick={() => folderRef.current?.click()}
+                    className="flex-1 border-2 border-dashed border-app rounded-xl py-6 text-sm text-muted hover:border-accent hover:text-accent transition-colors cursor-pointer bg-transparent flex flex-col items-center justify-center gap-1.5">
+                    <span className="text-2xl">📁</span>
+                    <span>Upload Folder</span>
+                  </button>
                 </div>
-              )}
 
-              {selectedFiles.length === 1 && !isFolderUpload && (
-                <div>
-                  <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1">Display name (optional)</label>
-                  <input value={name} onChange={e => setName(e.target.value)} className={INPUT}
-                    placeholder={selectedFiles[0].name.replace(/\.[^.]+$/, '')} />
-                </div>
-              )}
-            </div>
-          )}
-          {error && (
-            <p className="text-xs text-danger font-semibold mt-1">
-              ❌ {error}
-            </p>
-          )}
-        </div>
-        <ModalFooter>
-          <Button type="button" onClick={onClose}>Cancel</Button>
-          <Button type="submit" variant="primary" disabled={busy || !canSubmit}>
-            {busy ? 'Adding…' : 'Add'}
-          </Button>
-        </ModalFooter>
-      </form>
+                {selectedFiles.length > 0 && (
+                  <div className="bg-raised border border-app rounded-xl p-3 text-xs text-muted flex flex-col gap-1 max-h-32 overflow-y-auto">
+                    <p className="font-semibold text-primary mb-1">
+                      {isFolderUpload ? `Folder: ${name}` : `${selectedFiles.length} file(s) selected:`}
+                    </p>
+                    {selectedFiles.slice(0, 5).map((f, idx) => (
+                      <span key={idx} className="truncate">
+                        📎 {isFolderUpload ? f.webkitRelativePath : f.name}
+                      </span>
+                    ))}
+                    {selectedFiles.length > 5 && (
+                      <span className="text-dim italic">...and {selectedFiles.length - 5} more</span>
+                    )}
+                  </div>
+                )}
+
+                {selectedFiles.length === 1 && !isFolderUpload && (
+                  <div>
+                    <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1">Display name (optional)</label>
+                    <input value={name} onChange={e => setName(e.target.value)} className={INPUT}
+                      placeholder={selectedFiles[0].name.replace(/\.[^.]+$/, '')} />
+                  </div>
+                )}
+              </div>
+            )}
+            {error && (
+              <p className="text-xs text-danger font-semibold mt-1">
+                ❌ {error}
+              </p>
+            )}
+          </div>
+          <ModalFooter>
+            <Button type="button" onClick={onClose}>Cancel</Button>
+            <Button type="submit" variant="primary" disabled={busy || !canSubmit}>
+              {busy ? 'Adding…' : 'Add'}
+            </Button>
+          </ModalFooter>
+        </form>
+      )}
     </Modal>
   )
 }
