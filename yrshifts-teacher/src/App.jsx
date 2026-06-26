@@ -148,6 +148,7 @@ function PushBanner({ userId, onDismiss }) {
       <span>✅</span><p className="text-xs text-ok font-semibold">Notifications enabled!</p>
     </div>
   )
+
   if (status === 'denied') return (
     <div className="mx-3 mb-2 flex items-center gap-2 bg-raised border border-app rounded-xl px-3 py-2.5">
       <span>🔕</span>
@@ -182,12 +183,140 @@ function PushBanner({ userId, onDismiss }) {
   )
 }
 
+// ── Onboarding Guide Component ────────────────────────────────────────────────
+function OnboardingGuide({ onClose }) {
+  const [slide, setSlide] = useState(1)
+
+  const handleNext = () => {
+    if (slide < 3) {
+      setSlide(slide + 1)
+    } else {
+      localStorage.setItem('shifthub_onboarding_completed', 'true')
+      onClose()
+    }
+  }
+
+  const handleBack = () => {
+    if (slide > 1) {
+      setSlide(slide - 1)
+    }
+  }
+
+  const handleSkip = () => {
+    localStorage.setItem('shifthub_onboarding_completed', 'true')
+    onClose()
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[1200] flex flex-col items-center justify-center p-6 select-none animate-fade-in">
+      <div className="w-full max-w-sm bg-card border border-app rounded-3xl p-6 flex flex-col items-center relative overflow-hidden shadow-2xl">
+        {/* Glow rings */}
+        <div className="absolute -top-12 -left-12 w-32 h-32 bg-accent/10 rounded-full blur-2xl pointer-events-none" />
+        <div className="absolute -bottom-12 -right-12 w-32 h-32 bg-accent/10 rounded-full blur-2xl pointer-events-none" />
+
+        {/* Skip button */}
+        <button onClick={handleSkip} className="absolute top-4 right-4 text-xs font-semibold text-dim hover:text-muted cursor-pointer bg-transparent border-none">
+          Skip
+        </button>
+
+        {/* Slide contents */}
+        {slide === 1 && (
+          <div className="flex flex-col items-center text-center py-6 animate-fade-in">
+            <div className="w-20 h-20 rounded-3xl bg-accent-soft border border-accent/20 flex items-center justify-center text-4xl mb-6 shadow-lg animate-float">
+              📅
+            </div>
+            <h2 className="text-xl font-bold text-primary mb-2">Welcome to ShiftHub!</h2>
+            <p className="text-sm text-muted leading-relaxed max-w-xs">
+              Your new direct portal for shift schedules, notifications, and company communications. Let's get you set up in less than a minute!
+            </p>
+          </div>
+        )}
+
+        {slide === 2 && (
+          <div className="flex flex-col items-center text-center py-4 animate-fade-in w-full">
+            <div className="w-20 h-20 rounded-3xl bg-accent-soft border border-accent/20 flex items-center justify-center text-4xl mb-4 shadow-lg animate-float">
+              📲
+            </div>
+            <h2 className="text-xl font-bold text-primary mb-2">Install the PWA</h2>
+            <p className="text-xs text-muted leading-relaxed mb-4 max-w-xs">
+              Install ShiftHub to your phone's home screen. It operates just like a native app and ensures push alerts work reliably.
+            </p>
+            
+            <div className="w-full bg-raised border border-app rounded-2xl p-4 text-left">
+              {isIOS ? (
+                <div>
+                  <p className="text-xs font-bold text-accent mb-2 flex items-center gap-1.5">
+                    🍎 Safari on iPhone Instructions:
+                  </p>
+                  <ol className="text-2xs text-muted flex flex-col gap-2 pl-4 list-decimal">
+                    <li>Tap the <strong>Share ⎙</strong> button at the bottom of Safari.</li>
+                    <li>Scroll down and tap <strong>"Add to Home Screen"</strong>.</li>
+                    <li>Launch <strong>ShiftHub</strong> from your home screen to log in.</li>
+                  </ol>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-xs font-bold text-accent mb-2 flex items-center gap-1.5">
+                    🤖 Chrome on Android Instructions:
+                  </p>
+                  <ol className="text-2xs text-muted flex flex-col gap-2 pl-4 list-decimal">
+                    <li>Tap the menu button (<strong>⋮</strong>) in the top-right corner.</li>
+                    <li>Tap <strong>"Install app"</strong> or <strong>"Add to Home screen"</strong>.</li>
+                    <li>Open <strong>ShiftHub</strong> from your app list.</li>
+                  </ol>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {slide === 3 && (
+          <div className="flex flex-col items-center text-center py-6 animate-fade-in">
+            <div className="w-20 h-20 rounded-3xl bg-accent-soft border border-accent/20 flex items-center justify-center text-4xl mb-6 shadow-lg animate-ring-alert">
+              🔔
+            </div>
+            <h2 className="text-xl font-bold text-primary mb-2">Enable Push Alerts</h2>
+            <p className="text-sm text-muted leading-relaxed max-w-xs mb-4">
+              Never miss a new shift assignment, calendar change, or direct message!
+            </p>
+            <p className="text-xs text-dim leading-relaxed bg-raised border border-app rounded-xl px-3 py-2">
+              👉 Just tap the 🔕 bell icon at the top of your screen to request push permissions.
+            </p>
+          </div>
+        )}
+
+        {/* Footer controls */}
+        <div className="w-full flex items-center justify-between border-t border-app pt-4 mt-4">
+          {/* Progress dots */}
+          <div className="flex gap-1.5">
+            {[1, 2, 3].map(i => (
+              <div key={i} className={`w-2 h-2 rounded-full transition-all duration-300 ${slide === i ? 'w-6 bg-accent' : 'bg-dim/50'}`} />
+            ))}
+          </div>
+
+          <div className="flex gap-2">
+            {slide > 1 && (
+              <button onClick={handleBack} className="px-4 py-2 text-xs font-semibold text-muted hover:text-primary cursor-pointer bg-transparent border-none">
+                Back
+              </button>
+            )}
+            <button onClick={handleNext} className="px-5 py-2 rounded-xl bg-accent text-white text-xs font-bold shadow-md cursor-pointer border-none hover:opacity-90 transition-opacity">
+              {slide === 3 ? 'Get Started' : 'Next'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
   const { user, userProfile, loading, profileMissing, init, signOut } = useAuthStore()
   const [tab,           setTab]           = useState('schedule')
   const [showPush,      setShowPush]      = useState(false)
   const [pushDismissed, setPushDismissed] = useState(false)
   const [isOffline,     setIsOffline]     = useState(!navigator.onLine)
+  const [showOnboarding, setShowOnboarding] = useState(false)
 
   useEffect(() => {
     init()
@@ -195,6 +324,23 @@ export default function App() {
     sessionStorage.removeItem('shifthub_teacher_chunk_reload')
     return () => {
       useSettingsStore.getState().cleanup()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (user) {
+      const completed = localStorage.getItem('shifthub_onboarding_completed')
+      if (completed !== 'true') {
+        setShowOnboarding(true)
+      }
+    }
+  }, [user])
+
+  useEffect(() => {
+    const handleReplay = () => setShowOnboarding(true)
+    window.addEventListener('shifthub_replay_onboarding', handleReplay)
+    return () => {
+      window.removeEventListener('shifthub_replay_onboarding', handleReplay)
     }
   }, [])
 
@@ -479,6 +625,7 @@ export default function App() {
           })}
         </div>
       </div>
+      {showOnboarding && <OnboardingGuide onClose={() => setShowOnboarding(false)} />}
     </div>
   )
 }
