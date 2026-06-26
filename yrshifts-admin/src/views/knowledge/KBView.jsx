@@ -286,6 +286,7 @@ export default function KBView() {
   const [search,   setSearch]   = useState('')
   const [loading,  setLoading]  = useState(true)
   const [deleting, setDeleting] = useState(null)
+  const [delBusy,  setDelBusy]  = useState(false)
   const [dragId,   setDragId]   = useState(null)   // id of node being dragged
   const [overId,   setOverId]   = useState(null)   // id of node being hovered over
 
@@ -312,13 +313,29 @@ export default function KBView() {
   }
 
   const handleDelete = async (id) => {
-    const deleteRecursive = async (nid) => {
-      const children = nodes.filter(n => n.parentId === nid)
-      for (const child of children) await deleteRecursive(child.id)
-      await deleteDoc(doc(db, 'kb_nodes', nid))
+    setDelBusy(true)
+    try {
+      const batch = writeBatch(db)
+      const collectIds = (nid) => {
+        const ids = [nid]
+        const children = nodes.filter(n => n.parentId === nid)
+        children.forEach(child => {
+          ids.push(...collectIds(child.id))
+        })
+        return ids
+      }
+      const idsToDelete = collectIds(id)
+      idsToDelete.forEach(nid => {
+        batch.delete(doc(db, 'kb_nodes', nid))
+      })
+      await batch.commit()
+      setDeleting(null)
+    } catch (err) {
+      console.error("Error deleting item:", err)
+      alert("Failed to delete item: " + err.message)
+    } finally {
+      setDelBusy(false)
     }
-    await deleteRecursive(id)
-    setDeleting(null)
   }
 
   // ── Drag-and-drop reorder ──────────────────────────────────────────────────
@@ -417,9 +434,11 @@ export default function KBView() {
           <ModalHeader title="Delete item?" onClose={() => setDeleting(null)} />
           <p className="text-sm text-muted mb-5">This will permanently delete the item and all its contents.</p>
           <ModalFooter>
-            <Button onClick={() => setDeleting(null)}>Cancel</Button>
-            <button onClick={() => handleDelete(deleting)}
-              className="px-4 py-1.5 bg-danger text-white text-sm font-semibold rounded-lg cursor-pointer border-none hover:opacity-90">Delete</button>
+            <Button onClick={() => setDeleting(null)} disabled={delBusy}>Cancel</Button>
+            <button onClick={() => handleDelete(deleting)} disabled={delBusy}
+              className="px-4 py-1.5 bg-danger text-white text-sm font-semibold rounded-lg cursor-pointer border-none hover:opacity-90 disabled:opacity-50">
+              {delBusy ? 'Deleting...' : 'Delete'}
+            </button>
           </ModalFooter>
         </Modal>
       )}
