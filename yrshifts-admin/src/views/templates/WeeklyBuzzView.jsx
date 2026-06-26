@@ -164,7 +164,7 @@ function RichEditor({ value, onChange, background }) {
                 <p className="text-2xs text-dim uppercase tracking-wide font-semibold mb-2">Text color</p>
                 <div className="grid grid-cols-4 gap-1.5">
                   {TEXT_COLORS.map(c => (
-                    <button key={c.value} onClick={() => applyColor(c.value)}
+                    <button key={c.value} onMouseDown={e => { e.preventDefault(); applyColor(c.value) }}
                       title={c.label}
                       className="w-8 h-8 rounded-lg border-2 border-app cursor-pointer hover:scale-110 transition-transform flex-shrink-0"
                       style={{ background: c.value || 'var(--text)', border: c.value === '' ? '2px solid var(--border)' : '2px solid transparent' }}
@@ -210,7 +210,7 @@ function RichEditor({ value, onChange, background }) {
                     <p className="text-2xs text-dim uppercase tracking-wide font-semibold mb-1.5">{g.label}</p>
                     <div className="flex flex-wrap gap-1">
                       {g.emojis.map(e => (
-                        <button key={e} onClick={() => insertEmoji(e)}
+                        <button key={e} onMouseDown={e => { e.preventDefault(); insertEmoji(e) }}
                           className="text-lg p-1 rounded hover:bg-raised cursor-pointer bg-transparent border-none transition-colors">{e}</button>
                       ))}
                     </div>
