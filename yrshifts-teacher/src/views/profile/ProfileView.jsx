@@ -217,6 +217,10 @@ export default function ProfileView() {
             className="w-full py-3 rounded-xl bg-accent text-white text-sm font-bold cursor-pointer border-none disabled:opacity-50">
             {saving ? 'Saving…' : 'Save changes'}
           </button>
+          <button onClick={() => window.dispatchEvent(new CustomEvent('shifthub_replay_onboarding'))}
+            className="w-full py-3 rounded-xl bg-raised border border-app text-sm font-bold text-primary hover:text-accent hover:border-accent transition-colors cursor-pointer mt-2">
+            📖 Replay App Guide
+          </button>
         </div>
 
         {/* Availability Settings */}
