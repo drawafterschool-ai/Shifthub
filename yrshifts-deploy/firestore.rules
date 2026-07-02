@@ -82,11 +82,16 @@ service cloud.firestore {
         let oldComments = 'comments' in resource.data ? resource.data.comments : [];
         let newComments = request.resource.data.comments;
         let added = newComments.removeAll(oldComments);
-        return (added.size() == 0) || (
-          added.size() == 1 &&
-          added[0].userId == request.auth.uid &&
-          newComments.size() == oldComments.size() + 1
-        );
+        // No removals ever (moderation is admin-only), and any addition is
+        // exactly one comment authored by the requester.
+        return oldComments.removeAll(newComments).size() == 0
+          && (
+            added.size() == 0 || (
+              added.size() == 1 &&
+              added[0].userId == request.auth.uid &&
+              newComments.size() == oldComments.size() + 1
+            )
+          );
       }
 
       allow read:   if isSignedIn();
