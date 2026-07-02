@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import {
   collection, onSnapshot, query, where,
   doc, updateDoc, addDoc, serverTimestamp,
+  arrayUnion,
 } from 'firebase/firestore'
 import { db } from '../utils/firebase'
 import { createNotification } from '../utils/notifications'
@@ -191,7 +192,7 @@ const useTeacherStore = create((set, get) => ({
     if (!post) return
     const seenBy = post.seenBy || []
     if (seenBy.includes(userId)) return
-    await updateDoc(doc(db, 'weekly_buzz', postId), { seenBy: [...seenBy, userId] })
+    await updateDoc(doc(db, 'weekly_buzz', postId), { seenBy: arrayUnion(userId) })
   },
 
   // Like / unlike a buzz post

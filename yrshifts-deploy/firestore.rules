@@ -64,13 +64,41 @@ service cloud.firestore {
 
     // ── Weekly Buzz ───────────────────────────────────────────────────────────
     match /weekly_buzz/{postId} {
+      function validSeenBy() {
+        let oldSeen = 'seenBy' in resource.data ? resource.data.seenBy : [];
+        let newSeen = request.resource.data.seenBy;
+        return newSeen.removeAll(oldSeen).hasOnly([request.auth.uid])
+            && oldSeen.removeAll(newSeen).size() == 0;
+      }
+
+      function validLikes() {
+        let oldLikes = 'likes' in resource.data ? resource.data.likes : [];
+        let newLikes = request.resource.data.likes;
+        return newLikes.removeAll(oldLikes).hasOnly([request.auth.uid])
+            && oldLikes.removeAll(newLikes).hasOnly([request.auth.uid]);
+      }
+
+      function validComments() {
+        let oldComments = 'comments' in resource.data ? resource.data.comments : [];
+        let newComments = request.resource.data.comments;
+        let added = newComments.removeAll(oldComments);
+        return (added.size() == 0) || (
+          added.size() == 1 &&
+          added[0].userId == request.auth.uid &&
+          newComments.size() == oldComments.size() + 1
+        );
+      }
+
       allow read:   if isSignedIn();
       allow create: if isAdmin();
       allow delete: if isAdmin();
       allow update: if isAdmin()
         || (isSignedIn()
             && request.resource.data.diff(resource.data)
-               .affectedKeys().hasOnly(['seenBy', 'likes', 'comments']));
+               .affectedKeys().hasOnly(['seenBy', 'likes', 'comments'])
+            && validSeenBy()
+            && validLikes()
+            && validComments());
     }
 
     // ── Notifications ─────────────────────────────────────────────────────────
@@ -83,14 +111,20 @@ service cloud.firestore {
 
     // ── Events ────────────────────────────────────────────────────────────────
     match /events/{eventId} {
+      function validRsvps() {
+        let oldRsvps = 'rsvps' in resource.data ? resource.data.rsvps : {};
+        let newRsvps = 'rsvps' in request.resource.data ? request.resource.data.rsvps : {};
+        return newRsvps.diff(oldRsvps).affectedKeys().hasOnly([request.auth.uid]);
+      }
+
       allow read:   if isSignedIn();
       allow create: if isAdmin();
       allow delete: if isAdmin();
       allow update: if isAdmin()
-        // Teachers can only update their own RSVP field
         || (isSignedIn()
             && request.resource.data.diff(resource.data)
-               .affectedKeys().hasOnly(['rsvps']));
+               .affectedKeys().hasOnly(['rsvps'])
+            && validRsvps());
     }
 
     // ── Reminders (written by Cloud Functions only — no client access needed) ──
