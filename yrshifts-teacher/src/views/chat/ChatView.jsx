@@ -369,12 +369,7 @@ export default function ChatView() {
                   className="w-7 h-7 rounded-md hover:bg-raised flex items-center justify-center text-sm cursor-pointer bg-transparent border-none text-muted">
                   {chat.pinnedAt ? '📌' : '📍'}
                 </button>
-                {(chat.createdBy === user?.uid || !chat.createdBy) && (
-                  <button onClick={e => { e.stopPropagation(); if (window.confirm('Delete this chat?')) deleteChat(chat.id) }}
-                    className="w-7 h-7 rounded-md hover:bg-danger-soft flex items-center justify-center text-sm cursor-pointer bg-transparent border-none text-danger">
-                    🗑
-                  </button>
-                )}
+
               </div>
             </div>
           )
@@ -433,11 +428,7 @@ export default function ChatView() {
           <p className="text-base font-bold text-primary truncate leading-tight">{getChatProfile(activeChat, user, instructors).name}</p>
           <p className="text-sm text-dim mt-0.5">{activeChat?.isGroup ? `${activeChat?.members?.length || 0} members` : 'Direct message'}</p>
         </div>
-        {(activeChat?.createdBy === user?.uid || !activeChat?.createdBy) && (
-          <button onClick={() => { if (window.confirm('Delete this chat?')) { deleteChat(activeChat?.id); setShowList(true) } }}
-            className="w-10 h-10 rounded-xl hover:bg-danger-soft border border-app flex items-center justify-center text-danger cursor-pointer bg-transparent"
-            title="Delete chat">🗑</button>
-        )}
+
       </div>
 
       {/* Messages */}
