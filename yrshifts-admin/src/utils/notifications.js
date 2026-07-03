@@ -27,6 +27,13 @@ export const NOTIF_ICONS = {
   shift_edited:    '✏️',
   shift_deleted:   '🗑',
   shift_reminder:  '⏰',
+  shift_updated:   '✏️',
+  shift_cancelled: '🗑',
+  shift_released:  '↩️',
+  shift_declined:  '🚫',
+  open_shift_posted:    '⚡',
+  shift_assigned_admin: '📅',
+  form_submitted:  '📝',
   // People
   instructor_joined: '👋',
   instructor_left:   '👤',
@@ -51,6 +58,13 @@ export const NOTIF_COLORS = {
   shift_edited:    'text-muted',
   shift_deleted:   'text-danger',
   shift_reminder:  'text-warn',
+  shift_updated:   'text-muted',
+  shift_cancelled: 'text-danger',
+  shift_released:  'text-danger',
+  shift_declined:  'text-muted',
+  open_shift_posted:    'text-warn',
+  shift_assigned_admin: 'text-accent',
+  form_submitted:  'text-ok',
   instructor_joined: 'text-ok',
   instructor_left:   'text-muted',
   first_login:       'text-ok',
@@ -63,7 +77,7 @@ export const NOTIF_COLORS = {
 }
 
 // ── Tab groups ────────────────────────────────────────────────────────────────
-export const SHIFT_TYPES   = ['shift_assigned','shift_confirmed','shift_rejected','shift_claimed','shift_unconfirmed','shift_edited','shift_deleted','shift_reminder']
+export const SHIFT_TYPES   = ['shift_assigned','shift_confirmed','shift_rejected','shift_claimed','shift_unconfirmed','shift_edited','shift_deleted','shift_reminder','shift_updated','shift_cancelled','shift_released','shift_declined','open_shift_posted','shift_assigned_admin']
 export const PEOPLE_TYPES  = ['instructor_joined','instructor_left','first_login']
 export const CHAT_TYPES    = ['chat_message','chat_reaction']
 export const BUZZ_TYPES    = ['buzz_posted','buzz_like','buzz_comment','buzz_seen']
@@ -93,6 +107,20 @@ export const notifMessage = (n) => {
       return `Shift "${shift}"${date ? ' on ' + date : ''} was deleted`
     case 'shift_reminder':
       return `Reminder: "${shift}" starts ${n.reminderType === '24h' ? 'tomorrow' : 'in 2 hours'} at ${time}`
+    case 'shift_updated':
+      return n.message || `"${shift}" on ${date}${time ? ' at ' + time : ''} was updated`
+    case 'shift_cancelled':
+      return n.message || `Shift "${shift}"${date ? ' on ' + date : ''} was cancelled`
+    case 'shift_released':
+      return `${name} released "${shift}" on ${date}${time ? ' at ' + time : ''}${n.message ? ` — note: "${n.message}"` : ''}`
+    case 'shift_declined':
+      return `${name} declined the open shift "${shift}"${date ? ' on ' + date : ''}${n.message ? ` — note: "${n.message}"` : ''}`
+    case 'open_shift_posted':
+      return n.message || `Open shift posted: "${shift}" on ${date}${time ? ' at ' + time : ''}`
+    case 'shift_assigned_admin':
+      return n.message || `"${shift}" on ${date}${time ? ' at ' + time : ''} assigned to ${n.teacherName || 'a teacher'}`
+    case 'form_submitted':
+      return n.message || `${name} submitted "${n.formTitle || 'a form'}"`
     // People
     case 'instructor_joined':
       return `${name} joined as a teacher`
