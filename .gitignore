@@ -21,3 +21,7 @@ node_modules/
 # Ignore OS files
 .DS_Store
 Thumbs.db
+
+# Ignore rules tests packages and local JDK
+yrshifts-deploy/rules_tests/node_modules/
+jdk21/
