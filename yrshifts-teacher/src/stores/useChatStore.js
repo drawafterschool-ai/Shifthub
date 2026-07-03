@@ -97,10 +97,15 @@ const useChatStore = create((set, get) => ({
           if (hasNewIncoming) {
             import('../utils/sound').then(({ playNotificationSound }) => playNotificationSound())
           }
+        }, (err) => {
+          console.error(`Error loading messages for chat ${chat.id}:`, err)
         })
         unsub._chatId = chat.id
         set(s => ({ _unsubs: [...s._unsubs, unsub] }))
       })
+    }, (err) => {
+      console.error('Error loading chats:', err)
+      set({ loading: false })
     })
     unsubChats._chatId = 'root-chats'
     set(s => ({ _unsubs: [...s._unsubs, unsubChats] }))
@@ -145,6 +150,8 @@ const useChatStore = create((set, get) => ({
       if (hasNewIncoming) {
         import('../utils/sound').then(({ playNotificationSound }) => playNotificationSound())
       }
+    }, (err) => {
+      console.error(`Error loading messages for active chat ${chatId}:`, err)
     })
     unsub._chatId = chatId
     set(s => ({ _unsubs: [...s._unsubs, unsub] }))
