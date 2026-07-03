@@ -15,7 +15,7 @@ const app = initializeApp({
 })
 
 export const db      = initializeFirestore(app, {
-  experimentalAutoDetectLongPolling: true,
+  experimentalForceLongPolling: true,
 })
 
 // Offline persistence — app loads from cache even without internet
