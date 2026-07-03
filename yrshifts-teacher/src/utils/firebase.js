@@ -15,6 +15,8 @@ const app = initializeApp({
 })
 
 export const db        = initializeFirestore(app, {
+  // Force long-polling: the streaming transport breaks behind some
+  // proxies/AV/extensions (Write/Listen channel 400s -> writes hang forever)
   experimentalForceLongPolling: true,
 })
 export const storage   = getStorage(app)
