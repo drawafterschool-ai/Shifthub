@@ -10,6 +10,12 @@ import { uid }         from '../../utils/helpers'
 
 const EMOJIS = ['👍','❤️','😂','🎉','🔥','👀','🙌','✅','😮','😢']
 
+const isImgAttachment = (a) => {
+  if (a.type?.startsWith('image/')) return true
+  const ext = a.name?.split('.').pop()?.toLowerCase()
+  return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif'].includes(ext)
+}
+
 function fmtTime(ts) {
   if (!ts) return ''
   const d = ts.seconds ? new Date(ts.seconds * 1000) : new Date(ts)
@@ -123,7 +129,7 @@ function Bubble({ msg, isMine, onReact, onReply, onForward, onDelete }) {
         >
           {msg.attachments?.map(a => (
             <div key={a.id} className="mb-2 last:mb-0">
-              {a.type?.startsWith('image/') ? (
+              {isImgAttachment(a) ? (
                 <img src={a.url} alt={a.name} className="rounded-xl max-w-full max-h-40 object-cover block" />
               ) : (
                 <a href={a.url} target="_blank" rel="noreferrer"
@@ -428,7 +434,12 @@ export default function ChatView() {
           <p className="text-base font-bold text-primary truncate leading-tight">{getChatProfile(activeChat, user, instructors).name}</p>
           <p className="text-sm text-dim mt-0.5">{activeChat?.isGroup ? `${activeChat?.members?.length || 0} members` : 'Direct message'}</p>
         </div>
-
+        <button onClick={() => pinChat(activeChat.id, !activeChat.pinnedAt)}
+          className={`w-9 h-9 rounded-full border border-app flex items-center justify-center text-sm cursor-pointer transition-colors flex-shrink-0
+            ${activeChat.pinnedAt ? 'bg-accent/15 border-accent text-accent' : 'bg-card hover:bg-raised text-muted'}`}
+          title={activeChat.pinnedAt ? 'Unpin chat' : 'Pin chat'}>
+          📌
+        </button>
       </div>
 
       {/* Messages */}
@@ -467,7 +478,7 @@ export default function ChatView() {
         <div className="mx-3 mb-1 flex flex-wrap gap-2 flex-shrink-0">
           {attachments.map(a => (
             <div key={a.id} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-raised border border-app rounded-xl text-xs">
-              {a.type?.startsWith('image/') ? '🖼️' : '📄'}
+              {isImgAttachment(a) ? '🖼️' : '📄'}
               <span className="text-primary max-w-[100px] truncate">{a.name}</span>
               <button onClick={() => setAttachments(prev => prev.filter(x => x.id !== a.id))}
                 className="text-dim cursor-pointer bg-transparent border-none">×</button>

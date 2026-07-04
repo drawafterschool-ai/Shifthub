@@ -27,10 +27,20 @@ const useChatStore = create((set, get) => ({
         .map(d => ({ id: d.id, ...d.data() }))
         .sort((a, b) => {
           // Pinned chats first, then by lastAt
-          const aPin = a.pinnedAt?.seconds || 0
-          const bPin = b.pinnedAt?.seconds || 0
+          const getSeconds = (val) => {
+            if (!val) return 0
+            if (val.seconds !== undefined) return val.seconds
+            if (val._seconds !== undefined) return val._seconds
+            if (typeof val.toDate === 'function') return Math.floor(val.toDate().getTime() / 1000)
+            if (val instanceof Date) return Math.floor(val.getTime() / 1000)
+            if (typeof val === 'number') return val > 1000000000000 ? Math.floor(val / 1000) : val
+            if (typeof val === 'string') return Math.floor(new Date(val).getTime() / 1000)
+            return 0
+          }
+          const aPin = getSeconds(a.pinnedAt)
+          const bPin = getSeconds(b.pinnedAt)
           if (aPin !== bPin) return bPin - aPin
-          return (b.lastAt?.seconds || 0) - (a.lastAt?.seconds || 0)
+          return getSeconds(b.lastAt) - getSeconds(a.lastAt)
         })
       set({ chats, loading: false })
 

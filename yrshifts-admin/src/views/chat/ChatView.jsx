@@ -13,6 +13,12 @@ import { uid }         from '../../utils/helpers'
 
 const EMOJIS = ['👍','❤️','😂','🎉','🔥','👀','🙌','✅','😮','😢']
 
+const isImgAttachment = (a) => {
+  if (a.type?.startsWith('image/')) return true
+  const ext = a.name?.split('.').pop()?.toLowerCase()
+  return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif'].includes(ext)
+}
+
 function fmtTime(ts) {
   if (!ts) return ''
   const d = ts.seconds ? new Date(ts.seconds * 1000) : new Date(ts)
@@ -124,8 +130,8 @@ function Bubble({ msg, isMine, onReact, onReply, onForward, onDelete }) {
           onClick={() => setShowActions(v => !v)}
         >
           {(() => {
-            const imgs = (msg.attachments || []).filter(a => a.type?.startsWith('image/'))
-            const files = (msg.attachments || []).filter(a => !a.type?.startsWith('image/'))
+            const imgs = (msg.attachments || []).filter(isImgAttachment)
+            const files = (msg.attachments || []).filter(a => !isImgAttachment(a))
             return (
               <>
                 {imgs.length > 0 && (
@@ -539,6 +545,7 @@ export default function ChatView() {
   const [fwdToast,    setFwdToast]    = useState('')
   const [inputEmoji,  setInputEmoji]  = useState(false)
   const [showDMPicker,setShowDMPicker]= useState(false)
+  const [dmStarting,  setDmStarting]  = useState(false)
   const [showNew,     setShowNew]     = useState(null)
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -879,6 +886,12 @@ export default function ChatView() {
                 </div>
               </div>
               <div className="flex items-center gap-3.5 flex-shrink-0">
+                <button onClick={() => pinChat(activeChat.id, !activeChat.pinnedAt)}
+                  className={`w-11 h-11 rounded-full border border-app flex items-center justify-center text-base cursor-pointer transition-colors
+                    ${activeChat.pinnedAt ? 'bg-accent/15 border-accent text-accent' : 'bg-card hover:bg-raised text-muted'}`}
+                  title={activeChat.pinnedAt ? 'Unpin chat' : 'Pin chat to top'}>
+                  📌
+                </button>
                 <button className="w-11 h-11 rounded-full bg-card hover:bg-raised border border-app flex items-center justify-center text-base cursor-pointer text-muted" title="Search messages">
                   🔍
                 </button>
@@ -928,7 +941,7 @@ export default function ChatView() {
               <div className="mx-6 mb-1 flex flex-wrap gap-2 flex-shrink-0">
                 {attachments.map(a => (
                   <div key={a.id} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-raised border border-app rounded-xl text-xs">
-                    {a.type?.startsWith('image/') ? '🖼️' : '📄'}
+                    {isImgAttachment(a) ? '🖼️' : '📄'}
                     <span className="text-primary max-w-[100px] truncate">{a.name}</span>
                     <button onClick={() => setAttachments(prev => prev.filter(x => x.id !== a.id))}
                       className="text-dim cursor-pointer bg-transparent border-none">×</button>
@@ -1015,29 +1028,38 @@ export default function ChatView() {
           chats={chats}
           currentUserId={user?.uid}
           onClose={() => setShowDMPicker(false)}
+          dmStarting={dmStarting}
           onStartDM={async (otherId, otherName) => {
-            const { addDoc, collection, query, where, getDocs, serverTimestamp } = await import('firebase/firestore')
-            const { db } = await import('../../utils/firebase')
-            const myId = user?.uid
-            const q = query(collection(db, 'chats'), where('isGroup', '==', false), where('members', 'array-contains', myId))
-            const snap = await getDocs(q)
-            const existing = snap.docs.find(d => {
-              const m = d.data().members || []
-              return m.includes(myId) && m.includes(otherId)
-            })
-            let chatId
-            if (existing) {
-              chatId = existing.id
-            } else {
-              const ref = await addDoc(collection(db, 'chats'), {
-                name: otherName, members: [myId, otherId],
-                isGroup: false, createdAt: serverTimestamp(),
-                lastMessage: '', lastAt: serverTimestamp(),
+            setDmStarting(true)
+            try {
+              const { addDoc, collection, query, where, getDocs, serverTimestamp } = await import('firebase/firestore')
+              const { db } = await import('../../utils/firebase')
+              const myId = user?.uid
+              const q = query(collection(db, 'chats'), where('isGroup', '==', false), where('members', 'array-contains', myId))
+              const snap = await getDocs(q)
+              const existing = snap.docs.find(d => {
+                const m = d.data().members || []
+                return m.includes(myId) && m.includes(otherId)
               })
-              chatId = ref.id
+              let chatId
+              if (existing) {
+                chatId = existing.id
+              } else {
+                const ref = await addDoc(collection(db, 'chats'), {
+                  name: otherName, members: [myId, otherId],
+                  isGroup: false, createdAt: serverTimestamp(),
+                  lastMessage: '', lastAt: serverTimestamp(),
+                })
+                chatId = ref.id
+              }
+              setShowDMPicker(false)
+              setActiveChat(chatId)
+            } catch (err) {
+              console.error("Failed to start DM:", err)
+              alert("Failed to start chat. Please try again.")
+            } finally {
+              setDmStarting(false)
             }
-            setShowDMPicker(false)
-            setActiveChat(chatId)
           }}
         />
       )}
@@ -1059,7 +1081,7 @@ export default function ChatView() {
 }
 
 // ── DM Picker ─────────────────────────────────────────────────────────────────
-function DMPicker({ chats, onClose, onStartDM, currentUserId }) {
+function DMPicker({ chats, onClose, onStartDM, currentUserId, dmStarting }) {
   const [q, setQ]       = useState('')
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
@@ -1092,16 +1114,18 @@ function DMPicker({ chats, onClose, onStartDM, currentUserId }) {
             className="w-full bg-raised border border-app rounded-xl px-3 py-2.5 text-sm text-primary placeholder:text-dim outline-none" />
         </div>
         <div className="flex-1 overflow-y-auto">
-          {loading ? (
-            <div className="flex items-center justify-center py-8">
+          {loading || dmStarting ? (
+            <div className="flex flex-col items-center justify-center py-8 gap-2">
               <div className="w-5 h-5 rounded-full border-2 border-accent border-t-transparent animate-spin" />
+              {dmStarting && <p className="text-xs text-dim">Starting chat thread...</p>}
             </div>
           ) : filtered.length === 0 ? (
             <p className="text-sm text-dim text-center py-8">No people found</p>
           ) : filtered.map(u => (
             <button key={u.id}
+              disabled={dmStarting}
               onClick={() => onStartDM(u.id, `${u.firstName} ${u.lastName || ''}`.trim())}
-              className="flex items-center gap-3 w-full px-4 py-3 text-left cursor-pointer bg-transparent border-none border-b border-app/20 hover:bg-raised">
+              className="flex items-center gap-3 w-full px-4 py-3 text-left cursor-pointer bg-transparent border-none border-b border-app/20 hover:bg-raised disabled:opacity-50">
               <Avatar firstName={u.firstName} lastName={u.lastName} color={u.color} photo={u.photo} size={40} />
               <div>
                 <p className="text-sm font-semibold text-primary">{u.firstName} {u.lastName}</p>

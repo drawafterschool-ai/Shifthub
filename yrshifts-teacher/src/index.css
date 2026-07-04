@@ -78,6 +78,13 @@ html, body {
     -webkit-backdrop-filter: none !important;
   }
 
+  /* Show hover actions permanently on touch/mobile devices with no cursor */
+  @media (hover: none) {
+    .group-hover\:flex {
+      display: flex !important;
+    }
+  }
+
   /* Keyframes for onboarding animation */
   @keyframes ringAlert {
     0%, 100% { transform: rotate(0); }
