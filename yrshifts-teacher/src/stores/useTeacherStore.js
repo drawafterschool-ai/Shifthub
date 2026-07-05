@@ -9,6 +9,19 @@ import { createNotification } from '../utils/notifications'
 
 const sessionStart = Date.now()
 
+function timeToMinutes(timeStr) {
+  if (!timeStr) return 0
+  const clean = timeStr.toLowerCase().replace(/\s+/g, '')
+  const match = clean.match(/^(\d{1,2}):(\d{2})(am|pm)$/)
+  if (!match) return 0
+  let hours = parseInt(match[1], 10)
+  const minutes = parseInt(match[2], 10)
+  const ampm = match[3]
+  if (ampm === 'pm' && hours < 12) hours += 12
+  if (ampm === 'am' && hours === 12) hours = 0
+  return hours * 60 + minutes
+}
+
 const useTeacherStore = create((set, get) => ({
   myShifts:      [],   // shifts assigned to me
   openShifts:    [],   // claimable unassigned shifts
@@ -52,7 +65,11 @@ const useTeacherStore = create((set, get) => ({
     // My assigned shifts
     const q1 = query(collection(db, 'shifts'), where('instructorId', '==', userId))
     const u1 = onSnapshot(q1, snap => {
-      const list = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => a.date.localeCompare(b.date))
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => {
+        const dateCompare = a.date.localeCompare(b.date)
+        if (dateCompare !== 0) return dateCompare
+        return timeToMinutes(a.start) - timeToMinutes(b.start)
+      })
       set({ myShifts: list, loading: false })
       try {
         localStorage.setItem(`shifthub_myShifts_${userId}`, JSON.stringify(list))
@@ -64,7 +81,11 @@ const useTeacherStore = create((set, get) => ({
     // Open / claimable shifts
     const q2 = query(collection(db, 'shifts'), where('claimable', '==', true))
     const u2  = onSnapshot(q2, snap => {
-      const list = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => a.date.localeCompare(b.date))
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => {
+        const dateCompare = a.date.localeCompare(b.date)
+        if (dateCompare !== 0) return dateCompare
+        return timeToMinutes(a.start) - timeToMinutes(b.start)
+      })
       set({ openShifts: list })
       try {
         localStorage.setItem(`shifthub_openShifts_${userId}`, JSON.stringify(list))
