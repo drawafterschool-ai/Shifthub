@@ -7,13 +7,14 @@ import DOMPurify       from 'dompurify'
 import useTeacherStore from '../../stores/useTeacherStore'
 import useAuthStore    from '../../stores/useAuthStore'
 
-const BACKGROUND_CLASS = {
-  none: 'bg-raised border-app',
-  sky: 'bg-sky-500/10 border-sky-500/30',
-  mint: 'bg-emerald-500/10 border-emerald-500/30',
-  lavender: 'bg-violet-500/10 border-violet-500/30',
-  sunset: 'bg-amber-500/10 border-amber-500/30',
-}
+const BACKGROUNDS = [
+  { key: 'default',    name: 'Default',      url: '',                 textCls: 'text-muted',        titleCls: 'text-primary',                  subCls: 'text-dim' },
+  { key: 'bg_bell',    name: 'Notification',  url: 'bg_bell.png',       textCls: 'text-white/95',     titleCls: 'text-white font-extrabold',     subCls: 'text-white/70' },
+  { key: 'bg_clouds',  name: 'Clouds',        url: 'bg_clouds.png',     textCls: 'text-slate-800/95', titleCls: 'text-slate-900 font-extrabold', subCls: 'text-slate-600' },
+  { key: 'bg_trees',   name: 'Trees',         url: 'bg_trees.png',      textCls: 'text-white/95',     titleCls: 'text-white font-extrabold',     subCls: 'text-white/70' },
+  { key: 'bg_snow',    name: 'Snowflakes',    url: 'bg_snowflakes.png', textCls: 'text-slate-800/95', titleCls: 'text-slate-900 font-extrabold', subCls: 'text-slate-600' },
+  { key: 'bg_doodles', name: 'Doodles',       url: 'bg_doodles.png',    textCls: 'text-white/95',     titleCls: 'text-white font-extrabold',     subCls: 'text-white/70' },
+]
 
 function fmtDate(ts) {
   if (!ts?.seconds) return ''
@@ -42,7 +43,15 @@ function PostModal({ post, userId, userName, onClose, onMarkSeen, onLike, onComm
   const liked    = (post.likes || []).includes(userId)
   const likeCount = (post.likes || []).length
   const comments  = (post.comments || []).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))
-  const bgClass = BACKGROUND_CLASS[post.backgroundId || 'none'] || BACKGROUND_CLASS.none
+  const bg = BACKGROUNDS.find(b => b.key === post.background) || BACKGROUNDS[0]
+  const bgUrl = bg.url ? `/app/backgrounds/${bg.url}` : ''
+  const cardStyle = bgUrl ? {
+    backgroundImage: `url(${bgUrl})`,
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+    color: bg.key === 'bg_clouds' || bg.key === 'bg_snow' ? '#1e293b' : '#ffffff',
+    textShadow: bg.key === 'bg_clouds' || bg.key === 'bg_snow' ? 'none' : '0 1px 3px rgba(0,0,0,0.5)',
+  } : {}
 
   const handleComment = async () => {
     if (!commentText.trim() || submitting) return
@@ -69,11 +78,11 @@ function PostModal({ post, userId, userName, onClose, onMarkSeen, onLike, onComm
             {post.authorName && <span className="font-semibold">{post.authorName} · </span>}
             {fmtDate(post.createdAt)}
           </p>
-          <div className={`rounded-xl border px-3 py-2 mb-6 ${bgClass}`}>
+          <div className={`rounded-2xl border p-5 mb-6 transition-all duration-300 ${bgUrl ? 'shadow-lg border-transparent' : 'bg-card border-app'}`} style={cardStyle}>
             <div
-              className="text-sm text-muted leading-relaxed prose prose-invert max-w-none"
+              className={`text-sm leading-relaxed max-w-none ${bgUrl ? bg.textCls : 'prose prose-invert text-muted'}`}
               dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(post.content || '') }}
-              style={{ lineHeight: 1.8 }}
+              style={{ lineHeight: 1.8, textAlign: bgUrl ? 'center' : 'left' }}
             />
           </div>
 
@@ -179,31 +188,41 @@ export default function UpdatesView() {
             ? new Date(post.createdAt.seconds * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
             : ''
 
-          const bgClass = BACKGROUND_CLASS[post.backgroundId || 'none'] || BACKGROUND_CLASS.none
+          const bg = BACKGROUNDS.find(b => b.key === post.background) || BACKGROUNDS[0]
+          const bgUrl = bg.url ? `/app/backgrounds/${bg.url}` : ''
+          const cardStyle = bgUrl ? {
+            backgroundImage: `url(${bgUrl})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            color: bg.key === 'bg_clouds' || bg.key === 'bg_snow' ? '#1e293b' : '#ffffff',
+            textShadow: bg.key === 'bg_clouds' || bg.key === 'bg_snow' ? 'none' : '0 1px 3px rgba(0,0,0,0.5)',
+          } : {}
 
           return (
-            <div key={post.id} className="bg-card border border-app rounded-2xl overflow-hidden">
+            <div key={post.id}
+              className={`border rounded-2xl overflow-hidden transition-all duration-300 ${bgUrl ? 'shadow-lg border-transparent' : 'bg-card border-app'}`}
+              style={cardStyle}>
               {/* Card body — tap to open */}
               <button onClick={() => setOpenPost(post)}
                 className="w-full text-left p-4 cursor-pointer bg-transparent border-none">
                 <div className="flex items-start gap-3">
                   <div className="flex-shrink-0 mt-1">
                     {seen
-                      ? <div className="w-2 h-2 rounded-full bg-raised" />
+                      ? <div className={`w-2 h-2 rounded-full ${bgUrl ? bg.key === 'bg_clouds' || bg.key === 'bg_snow' ? 'bg-slate-700/20' : 'bg-white/20' : 'bg-raised'}`} />
                       : <div className="w-2 h-2 rounded-full bg-accent animate-pulse" />}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2 mb-1">
-                      <p className={`text-sm leading-tight ${seen ? 'font-medium text-muted' : 'font-bold text-primary'}`}>
+                      <p className={`text-sm leading-tight ${seen ? 'font-medium' : 'font-bold'} ${bgUrl ? bg.titleCls : 'text-primary'}`}>
                         {post.title}
                       </p>
-                      <span className="text-xs text-dim flex-shrink-0">{d}</span>
+                      <span className={`text-xs flex-shrink-0 ${bgUrl ? bg.subCls : 'text-dim'}`}>{d}</span>
                     </div>
-                    <div className={`text-xs text-dim line-clamp-2 leading-relaxed mt-1 rounded-lg border px-2.5 py-2 ${bgClass}`}>
+                    <div className={`text-xs line-clamp-2 leading-relaxed mt-1 ${bgUrl ? bg.textCls : 'rounded-lg border px-2.5 py-2 bg-raised border-app text-dim'}`}>
                       {post.content?.replace(/<[^>]*>/g, '').slice(0, 120)}
                     </div>
                     {!seen && (
-                      <span className="inline-block mt-2 px-2 py-0.5 rounded-full bg-accent-soft text-accent text-[10px] font-bold uppercase tracking-wide">
+                      <span className="inline-block mt-2 px-2 py-0.5 rounded-full bg-accent text-white text-[10px] font-bold uppercase tracking-wide">
                         New
                       </span>
                     )}
@@ -212,18 +231,19 @@ export default function UpdatesView() {
               </button>
 
               {/* Like + comment bar */}
-              <div className="flex border-t border-app">
+              <div className={`flex border-t ${bgUrl ? 'border-white/10' : 'border-app'}`}>
                 <button
                   onClick={() => toggleBuzzLike(post.id, uid, userName)}
                   className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold cursor-pointer bg-transparent border-none transition-colors
-                    ${liked ? 'text-pink-400' : 'text-muted hover:text-pink-400'}`}>
+                    ${liked ? 'text-pink-400' : bgUrl ? bg.key === 'bg_clouds' || bg.key === 'bg_snow' ? 'text-slate-600 hover:text-pink-500' : 'text-white/80 hover:text-pink-400' : 'text-muted hover:text-pink-400'}`}>
                   <span>{liked ? '❤️' : '🤍'}</span>
                   <span>{likeCount > 0 ? likeCount : 'Like'}</span>
                 </button>
-                <div className="w-px bg-app" />
+                <div className={`w-px ${bgUrl ? 'bg-white/10' : 'bg-app'}`} />
                 <button
                   onClick={() => { setOpenPost(post) }}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold text-muted hover:text-primary cursor-pointer bg-transparent border-none transition-colors">
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold cursor-pointer bg-transparent border-none transition-colors
+                    ${bgUrl ? bg.key === 'bg_clouds' || bg.key === 'bg_snow' ? 'text-slate-600 hover:text-primary' : 'text-white/80 hover:text-primary' : 'text-muted hover:text-primary'}`}>
                   <span>💬</span>
                   <span>{cmtCount > 0 ? cmtCount : 'Comment'}</span>
                 </button>
