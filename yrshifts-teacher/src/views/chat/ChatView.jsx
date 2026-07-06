@@ -107,6 +107,35 @@ function Bubble({ msg, isMine, onReact, onReply, onForward, onDelete }) {
   const [showEmoji,   setShowEmoji]   = useState(false)
   const hasReactions = msg.reactions && Object.keys(msg.reactions).some(k => msg.reactions[k]?.length > 0)
 
+  const touchTimer = useRef(null)
+  const touchActive = useRef(false)
+
+  const handleTouchStart = () => {
+    touchActive.current = true
+    if (touchTimer.current) clearTimeout(touchTimer.current)
+    touchTimer.current = setTimeout(() => {
+      if (touchActive.current) {
+        setShowActions(true)
+        if (navigator.vibrate) navigator.vibrate(40)
+      }
+    }, 500)
+  }
+
+  const handleTouchEnd = () => {
+    touchActive.current = false
+    if (touchTimer.current) clearTimeout(touchTimer.current)
+  }
+
+  const handleTouchMove = () => {
+    touchActive.current = false
+    if (touchTimer.current) clearTimeout(touchTimer.current)
+  }
+
+  const handleContextMenu = (e) => {
+    e.preventDefault()
+    setShowActions(true)
+  }
+
   return (
     <div className={`w-full flex flex-col gap-1.5 ${isMine ? 'items-end' : 'items-start'}`}>
       {!isMine && <span className="text-sm font-semibold text-accent px-1">{msg.authorName}</span>}
@@ -120,12 +149,16 @@ function Bubble({ msg, isMine, onReact, onReply, onForward, onDelete }) {
         </div>
       )}
 
-      {/* Bubble + long-press actions */}
+      {/* Bubble + actions */}
       <div className={`flex items-end gap-2.5 max-w-[85%] md:max-w-[500px] ${isMine ? 'flex-row-reverse' : ''}`}>
         <div
           className={`relative min-w-[70px] px-6 py-3 rounded-3xl text-base leading-relaxed cursor-pointer select-none
             ${isMine ? 'bg-accent text-white' : 'bg-card border border-app text-primary'}`}
-          onClick={() => setShowActions(v => !v)}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+          onTouchMove={handleTouchMove}
+          onContextMenu={handleContextMenu}
+          onClick={() => setShowActions(true)}
         >
           {msg.attachments?.map(a => (
             <div key={a.id} className="mb-2 last:mb-0">
@@ -161,37 +194,76 @@ function Bubble({ msg, isMine, onReact, onReply, onForward, onDelete }) {
           )}
         </div>
 
-        {/* Inline action buttons (visible after tap) */}
+        {/* Actions Bottom Sheet Modal */}
         {showActions && (
-          <div className={`flex flex-col gap-1 ${isMine ? 'items-end' : 'items-start'}`}>
-            <div className="relative">
-              <button onClick={() => setShowEmoji(v => !v)}
-                className="w-8 h-8 rounded-xl bg-card border border-app text-sm flex items-center justify-center cursor-pointer">
-                😊
-              </button>
-              {showEmoji && (
-                <>
-                  <div onClick={() => setShowEmoji(false)} className="fixed inset-0 z-10" />
-                  <div className={`absolute z-20 bottom-full mb-1 bg-card border border-app rounded-2xl p-2.5 flex flex-wrap gap-2 shadow-xl w-52
-                    ${isMine ? 'right-0' : 'left-0'}`}>
-                    {EMOJIS.map(e => (
-                      <button key={e} onClick={() => { onReact(e); setShowEmoji(false); setShowActions(false) }}
-                        className="text-xl cursor-pointer bg-transparent border-none p-1 rounded hover:bg-raised">{e}</button>
-                    ))}
-                  </div>
-                </>
-              )}
+          <div className="fixed inset-0 z-[1100] flex items-end justify-center bg-black/60 px-4 pb-8"
+            onClick={() => setShowActions(false)}>
+            <div className="w-full max-w-sm bg-surface border border-app rounded-3xl overflow-hidden animate-slide-up"
+              style={{ background: 'var(--dropdown-bg)' }}
+              onClick={e => e.stopPropagation()}>
+              {/* Drag handle */}
+              <div className="flex justify-center pt-3 pb-2">
+                <div className="w-10 h-1 rounded-full bg-raised" />
+              </div>
+              
+              {/* Horizontal Emoji Row */}
+              <div className="flex items-center justify-around px-5 py-3.5 border-b border-app">
+                {['👍', '❤️', '😂', '😮', '😢', '🎉'].map(emoji => (
+                  <button key={emoji} onClick={() => { onReact(emoji); setShowActions(false) }}
+                    className="text-2xl hover:scale-125 transition-transform duration-150 cursor-pointer bg-transparent border-none p-1">
+                    {emoji}
+                  </button>
+                ))}
+                <button onClick={() => { setShowEmoji(true); setShowActions(false) }}
+                  className="w-8 h-8 rounded-full bg-raised hover:bg-card border border-app flex items-center justify-center text-sm cursor-pointer text-muted font-bold"
+                  title="All emojis">
+                  ➕
+                </button>
+              </div>
+
+              {/* Vertical Action List */}
+              <div className="flex flex-col py-1.5">
+                {!isMine && onReply && (
+                  <button onClick={() => { onReply(); setShowActions(false) }}
+                    className="flex items-center gap-4.5 px-6 py-4 w-full text-left cursor-pointer hover:bg-raised bg-transparent border-none text-primary text-sm font-semibold transition-colors">
+                    <span className="text-lg text-accent leading-none">↩</span>
+                    <span>Reply</span>
+                  </button>
+                )}
+                <button onClick={() => { onForward(); setShowActions(false) }}
+                  className="flex items-center gap-4.5 px-6 py-4 w-full text-left cursor-pointer hover:bg-raised bg-transparent border-none text-primary text-sm font-semibold transition-colors">
+                  <span className="text-lg text-accent leading-none">↗</span>
+                  <span>Forward message</span>
+                </button>
+                {onDelete && (
+                  <button onClick={() => { if (window.confirm('Delete message?')) onDelete(); setShowActions(false) }}
+                    className="flex items-center gap-4.5 px-6 py-4 w-full text-left cursor-pointer hover:bg-danger-soft hover:text-danger bg-transparent border-none text-danger text-sm font-semibold transition-colors">
+                    <span className="text-lg leading-none">🗑</span>
+                    <span>Delete for everyone</span>
+                  </button>
+                )}
+              </div>
             </div>
-            {!isMine && (
-              <button onClick={() => { onReply(); setShowActions(false) }}
-                className="w-8 h-8 rounded-xl bg-card border border-app text-sm flex items-center justify-center cursor-pointer">↩</button>
-            )}
-            <button onClick={() => { onForward(); setShowActions(false) }}
-              className="w-8 h-8 rounded-xl bg-card border border-app text-sm flex items-center justify-center cursor-pointer">↗</button>
-            {isMine && (
-              <button onClick={() => { if (window.confirm('Delete message?')) onDelete(); setShowActions(false) }}
-                className="w-8 h-8 rounded-xl bg-danger-soft border border-danger/30 text-danger text-sm flex items-center justify-center cursor-pointer">🗑</button>
-            )}
+          </div>
+        )}
+
+        {/* Full Emoji Picker Popover */}
+        {showEmoji && (
+          <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/60 px-4"
+            onClick={() => setShowEmoji(false)}>
+            <div className="w-full max-w-xs bg-surface border border-app rounded-3xl p-5 shadow-2xl animate-fade-in"
+              style={{ background: 'var(--dropdown-bg)' }}
+              onClick={e => e.stopPropagation()}>
+              <p className="text-xs font-bold text-muted uppercase tracking-wide mb-3.5">All Reactions</p>
+              <div className="flex flex-wrap gap-2 justify-center">
+                {EMOJIS.map(e => (
+                  <button key={e} onClick={() => { onReact(e); setShowEmoji(false); setShowActions(false) }}
+                    className="text-2xl hover:scale-125 transition-transform duration-150 cursor-pointer bg-transparent border-none p-1.5 rounded-xl hover:bg-raised">
+                    {e}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         )}
       </div>
