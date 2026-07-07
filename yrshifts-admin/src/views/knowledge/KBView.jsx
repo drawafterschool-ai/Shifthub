@@ -386,6 +386,7 @@ export default function KBView() {
   }
 
   const handleDelete = async (id) => {
+    setDeleting(null)
     setDelBusy(true)
     try {
       const batch = writeBatch(db)
@@ -402,7 +403,6 @@ export default function KBView() {
         batch.delete(doc(db, 'kb_nodes', nid))
       })
       await batch.commit()
-      setDeleting(null)
     } catch (err) {
       console.error("Error deleting item:", err)
       alert("Failed to delete item: " + err.message)
