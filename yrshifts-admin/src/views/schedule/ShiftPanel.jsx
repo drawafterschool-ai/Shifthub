@@ -415,7 +415,7 @@ export default function ShiftPanel({ shift, dateKey, isNew, onClose, onSaved, sm
       for (const f of files) {
         const snap = await uploadBytes(ref(storage, `shift_attachments/${uid()}_${f.name}`), f)
         const url  = await getDownloadURL(snap.ref)
-        added.push({ id: uid(), name: f.name, url, type: f.type })
+        added.push({ id: uid(), name: f.name || 'file', url: url || '', type: f.type || '' })
       }
       setAttachments(prev => [...prev, ...added])
     } catch { setErr('Upload failed — check your connection.') }
