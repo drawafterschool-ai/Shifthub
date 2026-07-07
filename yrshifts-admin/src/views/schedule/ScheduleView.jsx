@@ -342,7 +342,7 @@ export default function ScheduleView() {
       )}
       {pendingDrop && <ConfirmDropModal drop={pendingDrop} instructors={instructors} onClose={() => setPendingDrop(null)} onConfirm={confirmDrop} />}
       {deletingShift && <DeleteScopeModal onClose={() => setDeletingShift(null)} onConfirm={executeGridDelete} />}
-      {ctx && <ShiftPanel shift={ctx.shift} dateKey={ctx.dateKey} isNew={ctx.isNew} onClose={() => setCtx(null)} onSaved={(msg) => { showToast(msg) }} sms={sms} />}
+      {ctx && <ShiftPanel shift={ctx.shift} dateKey={ctx.dateKey} isNew={ctx.isNew} onClose={() => setCtx(null)} onSaved={(msg) => { showToast(msg); setCtx(null) }} sms={sms} />}
 
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 px-5 py-2.5 bg-card border border-app text-primary text-sm font-semibold rounded-xl shadow-xl z-[9999] animate-fade-in whitespace-nowrap">
