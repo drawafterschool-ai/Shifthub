@@ -25,3 +25,8 @@ Thumbs.db
 # Ignore rules tests packages and local JDK
 yrshifts-deploy/rules_tests/node_modules/
 jdk21/
+
+# Ignore Firebase deploy artifacts and local debug logs
+yrshifts-deploy/.firebase/
+yrshifts-deploy/firestore-debug.log
+yrshifts-deploy/scratch/
