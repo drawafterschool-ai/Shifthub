@@ -529,7 +529,7 @@ export default function ChatView() {
               onReact={(emoji) => addReaction(activeChatId, msg.id, emoji, user?.uid)}
               onReply={() => { setReplyTo(msg); inputRef.current?.focus() }}
               onForward={() => setForwardMsg(msg)}
-              onDelete={() => deleteMessage(activeChatId, msg.id)} />
+              onDelete={isMine ? () => deleteMessage(activeChatId, msg.id) : null} />
           )
         })}
       </div>
