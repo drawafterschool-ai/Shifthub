@@ -74,13 +74,13 @@ echo "    ✓ dist/app/   — $(find "$DIST_DIR/app"   -type f | wc -l | tr -d '
 # ── Deploy ─────────────────────────────────────────────────────────────────
 echo ""
 if [ "$SKIP_FUNCTIONS" = true ]; then
-  echo "🚀  Deploying hosting + Firestore (skipping functions)…"
-  firebase deploy --only hosting,firestore:rules
+  echo "🚀  Deploying hosting + Firestore + Storage (skipping functions)…"
+  firebase deploy --only hosting,firestore:rules,storage
 else
   echo "📦  Installing Cloud Functions dependencies…"
   (cd "$DEPLOY_DIR/functions" && npm install --silent)
   echo "🚀  Deploying everything…"
-  firebase deploy --only hosting,firestore:rules,functions
+  firebase deploy --only hosting,firestore:rules,storage,functions
 fi
 
 echo ""
