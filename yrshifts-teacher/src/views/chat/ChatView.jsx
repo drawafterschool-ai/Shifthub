@@ -102,7 +102,15 @@ function ForwardSheet({ text, chats, onClose, onForward }) {
 }
 
 // ── Message bubble ─────────────────────────────────────────────────────────────
-function Bubble({ msg, isMine, onReact, onReply, onForward, onDelete }) {
+// Read-receipt helper: serverTimestamp | seconds-shape | null → millis
+function tsMillis(ts) {
+  if (!ts) return null
+  if (ts.toMillis) return ts.toMillis()
+  if (ts.seconds) return ts.seconds * 1000
+  return null
+}
+
+function Bubble({ msg, isMine, read, onReact, onReply, onForward, onDelete }) {
   const [showActions, setShowActions] = useState(false)
   const [showEmoji,   setShowEmoji]   = useState(false)
   const hasReactions = msg.reactions && Object.keys(msg.reactions).some(k => msg.reactions[k]?.length > 0)
@@ -184,8 +192,9 @@ function Bubble({ msg, isMine, onReact, onReply, onForward, onDelete }) {
                     {fmtTime(msg.createdAt)}
                   </span>
                   {isMine && (
-                    <span className="text-white/80 leading-none text-xs ml-0.5 select-none font-bold tracking-tighter">
-                      ✓✓
+                    <span className={`leading-none text-xs ml-0.5 select-none font-bold tracking-tighter ${read ? 'text-white' : 'text-white/45'}`}
+                      title={read ? 'Read' : 'Sent'}>
+                      {read ? '✓✓' : '✓'}
                     </span>
                   )}
                 </span>
@@ -524,8 +533,12 @@ export default function ChatView() {
         )}
         {activeMsgs.map(msg => {
           const isMine = msg.authorId === user?.uid
+          const sentAt = tsMillis(msg.createdAt)
+          const others = (activeChat?.members || []).filter(id => id !== user?.uid)
+          const isRead = sentAt != null && others.length > 0 &&
+            others.every(id => (tsMillis(activeChat?.lastRead?.[id]) || 0) >= sentAt)
           return (
-            <Bubble key={msg.id} msg={msg} isMine={isMine}
+            <Bubble key={msg.id} msg={msg} isMine={isMine} read={isRead}
               onReact={(emoji) => addReaction(activeChatId, msg.id, emoji, user?.uid)}
               onReply={() => { setReplyTo(msg); inputRef.current?.focus() }}
               onForward={() => setForwardMsg(msg)}
