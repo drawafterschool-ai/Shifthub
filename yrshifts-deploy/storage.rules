@@ -1,4 +1,5 @@
 rules_version = '2';
+// Verification update to force rules upload and trigger IAM provisioning check
 service firebase.storage {
   match /b/{bucket}/o {
 
