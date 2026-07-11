@@ -36,7 +36,7 @@ if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
 
 admin.initializeApp({
   credential: admin.applicationDefault(),
-  storageBucket: 'yrshifts.appspot.com'
+  storageBucket: 'yrshifts.firebasestorage.app'
 });
 
 const db = getFirestore();
