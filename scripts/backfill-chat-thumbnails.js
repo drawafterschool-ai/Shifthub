@@ -93,7 +93,8 @@ async function processAttachment(attachment, messageId) {
     let quality = 80;
     let thumbBuffer;
     
-    const image = sharp(originalTempPath).rotate().resize({
+    const fileBuffer = fs.readFileSync(originalTempPath);
+    const image = sharp(fileBuffer).rotate().resize({
       width: 480,
       height: 480,
       fit: 'inside',
