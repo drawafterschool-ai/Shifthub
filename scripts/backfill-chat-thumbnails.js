@@ -33,7 +33,7 @@ if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
 }
 
 admin.initializeApp({
-  credential: admin.credential.applicationDefault(),
+  credential: admin.applicationDefault(),
   storageBucket: 'yrshifts.appspot.com'
 });
 
