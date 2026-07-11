@@ -176,10 +176,10 @@ function Bubble({ msg, isMine, read, onImageOpen, onReact, onReply, onForward, o
                 {imgs.length > 0 && (
                   <div className={`grid gap-1 mb-2 ${imgs.length === 1 ? 'grid-cols-1' : imgs.length === 2 ? 'grid-cols-2' : imgs.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
                     {imgs.map((a, i) => (
-                      <a key={a.id} href={a.url} target="_blank" rel="noreferrer" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onImageOpen?.(a.url) }}
+                      <div key={a.id} onClick={(e) => { e.preventDefault(); e.stopPropagation(); onImageOpen?.(a.url) }}
                         className={`block overflow-hidden ${imgs.length === 1 ? 'rounded-xl' : i === 0 && imgs.length === 3 ? 'rounded-tl-xl rounded-bl-xl' : i === 0 ? 'rounded-tl-xl rounded-bl-xl' : i === imgs.length - 1 ? 'rounded-tr-xl rounded-br-xl' : ''}`}>
                         <img src={a.thumbUrl || a.url} alt={a.name} loading="lazy" decoding="async" className="w-full object-cover cursor-pointer" style={{ height: imgs.length === 1 ? 160 : 100 }} />
-                      </a>
+                      </div>
                     ))}
                   </div>
                 )}
