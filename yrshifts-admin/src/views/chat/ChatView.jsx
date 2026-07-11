@@ -111,7 +111,7 @@ function tsMillis(ts) {
   return null
 }
 
-function Bubble({ msg, isMine, read, onReact, onReply, onForward, onDelete }) {
+function Bubble({ msg, isMine, read, onImageOpen, onReact, onReply, onForward, onDelete }) {
   const [showActions, setShowActions] = useState(false)
   const [showEmoji,   setShowEmoji]   = useState(false)
   const hasReactions = msg.reactions && Object.keys(msg.reactions).some(k => msg.reactions[k]?.length > 0)
@@ -177,9 +177,9 @@ function Bubble({ msg, isMine, read, onReact, onReply, onForward, onDelete }) {
                 {imgs.length > 0 && (
                   <div className={`grid gap-1 mb-2 ${imgs.length === 1 ? 'grid-cols-1' : imgs.length === 2 ? 'grid-cols-2' : imgs.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
                     {imgs.map((a, i) => (
-                      <a key={a.id} href={a.url} target="_blank" rel="noreferrer"
+                      <a key={a.id} href={a.url} target="_blank" rel="noreferrer" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onImageOpen?.(a.url) }}
                         className={`block overflow-hidden ${imgs.length === 1 ? 'rounded-xl' : i === 0 && imgs.length === 3 ? 'rounded-tl-xl rounded-bl-xl' : i === 0 ? 'rounded-tl-xl rounded-bl-xl' : i === imgs.length - 1 ? 'rounded-tr-xl rounded-br-xl' : ''}`}>
-                        <img src={a.url} alt={a.name} className="w-full object-cover" style={{ height: imgs.length === 1 ? 160 : 100 }} />
+                        <img src={a.thumbUrl || a.url} alt={a.name} loading="lazy" decoding="async" className="w-full object-cover cursor-pointer" style={{ height: imgs.length === 1 ? 160 : 100 }} />
                       </a>
                     ))}
                   </div>
@@ -619,6 +619,7 @@ export default function ChatView() {
   const [msgText,     setMsgText]     = useState('')
   const [replyTo,     setReplyTo]     = useState(null)
   const [attachments, setAttachments] = useState([])
+  const [lightbox,    setLightbox]    = useState(null)
   const [uploading,   setUploading]   = useState(false)
   const [sending,     setSending]     = useState(false)
   const [forwardMsg,  setForwardMsg]  = useState(null)
@@ -684,7 +685,17 @@ export default function ChatView() {
         catch (sizeErr) { alert(sizeErr.message); continue }
         const snap = await uploadBytes(stRef(storage, `chat_attachments/${uid()}_${processed.name}`), processed)
         const url  = await getDownloadURL(snap.ref)
-        added.push({ id: uid(), name: f.name, url, type: f.type })
+        // Generate a small thumbnail alongside the full image so threads load fast
+        let thumbUrl = null
+        if (processed.type.startsWith('image/')) {
+          const { makeThumbnail } = await import('../../utils/resizeFile')
+          const t = await makeThumbnail(processed)
+          if (t) {
+            const tSnap = await uploadBytes(stRef(storage, `chat_attachments/thumb_${uid()}_${processed.name}`), t)
+            thumbUrl = await getDownloadURL(tSnap.ref)
+          }
+        }
+        added.push({ id: uid(), name: f.name, url, thumbUrl: thumbUrl || url, type: f.type })
       }
       setAttachments(prev => [...prev, ...added])
     } catch (e) { console.error(e) }
@@ -1000,7 +1011,7 @@ export default function ChatView() {
                 const isRead = sentAt != null && others.length > 0 &&
                   others.every(id => (tsMillis(activeChat?.lastRead?.[id]) || 0) >= sentAt)
                 return (
-                  <Bubble key={msg.id} msg={msg} isMine={isMine} read={isRead}
+                  <Bubble key={msg.id} msg={msg} isMine={isMine} read={isRead} onImageOpen={setLightbox}
                     onReact={(emoji) => addReaction(activeChatId, msg.id, emoji, user?.uid)}
                     onReply={() => { setReplyTo(msg); inputRef.current?.focus() }}
                     onForward={() => setForwardMsg(msg)}
@@ -1158,6 +1169,16 @@ export default function ChatView() {
       {fwdToast && (
         <div className="fixed bottom-24 left-1/2 -translate-x-1/2 px-4 py-2 bg-ok text-white text-xs font-bold rounded-xl z-50 whitespace-nowrap">
           ✅ {fwdToast}
+        </div>
+      )}
+
+      {/* Lightbox Modal */}
+      {lightbox && (
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/90 cursor-pointer animate-fade-in"
+          onClick={() => setLightbox(null)}>
+          <button className="absolute top-5 right-5 text-white text-3xl font-bold bg-transparent border-none outline-none select-none cursor-pointer"
+            onClick={() => setLightbox(null)}>×</button>
+          <img src={lightbox} alt="Full screen preview" className="max-w-full max-h-full object-contain p-4" />
         </div>
       )}
     </div>
