@@ -19,6 +19,8 @@
  */
 
 const admin = require('firebase-admin');
+const { getFirestore } = require('firebase-admin/firestore');
+const { getStorage } = require('firebase-admin/storage');
 const sharp = require('sharp');
 const { v4: uuidv4 } = require('uuid');
 const fs = require('fs');
@@ -37,8 +39,8 @@ admin.initializeApp({
   storageBucket: 'yrshifts.appspot.com'
 });
 
-const db = admin.firestore();
-const bucket = admin.storage().bucket();
+const db = getFirestore();
+const bucket = getStorage().bucket();
 
 const DRY_RUN = process.env.DRY_RUN !== 'false';
 
