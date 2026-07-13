@@ -115,7 +115,7 @@ async function runTests() {
     }
   }
 
-  console.log('\n🏃 Running 58 rules assertions...\n');
+  console.log('\n🏃 Running 68 rules assertions...\n');
 
   // ── CHATS & MESSAGES (19 Assertions) ───────────────────────────────────────
   console.log('--- Chats & Messages ---');
@@ -318,13 +318,40 @@ async function runTests() {
   await assertFailure(getDoc(doc(unauthDb, 'settings', 'company')), '57. Unauth user cannot read settings');
   await assertSuccess(getDoc(doc(teacherADb, 'settings', 'company')), '58. Authenticated user can read settings');
 
+
+  // ── Notification creation hardening ─────────────────────────────────────
+  console.log('\n🔔 Notification creation hardening');
+  const notif = (db, data) => setDoc(doc(db, 'notifications', `n-${Math.random().toString(36).slice(2)}`),
+    { status: 'unread', createdAt: Date.now(), ...data });
+
+  await assertSuccess(notif(teacherADb, { type: 'shift_released', recipientId: 'admin', actorName: 'Teacher A', message: 'family emergency' }),
+    '59. Teacher creates shift_released admin alert (release flow with note)');
+  await assertSuccess(notif(teacherADb, { type: 'shift_declined', recipientId: 'admin', actorName: 'Teacher A' }),
+    '60. Teacher creates shift_declined admin alert');
+  await assertSuccess(notif(teacherADb, { type: 'form_submitted', recipientId: 'admin', actorName: 'Teacher A', formTitle: 'W-9' }),
+    '61. Teacher creates form_submitted admin alert');
+  await assertSuccess(notif(teacherADb, { type: 'first_login', recipientId: 'admin', actorName: 'Teacher A' }),
+    '62. Teacher creates first_login admin alert');
+  await assertSuccess(notif(teacherADb, { type: 'buzz_like', forAdmin: true, actorName: 'Teacher A', postId: 'p1' }),
+    '63. Teacher creates buzz_like (forAdmin, no recipientId)');
+  await assertSuccess(notif(adminDb, { type: 'shift_assigned', recipientId: 'teacher-b', shiftTitle: 'Elem Art' }),
+    '64. Admin creates shift_assigned to a teacher (admin bypass)');
+  await assertFailure(notif(teacherADb, { type: 'shift_assigned', recipientId: 'teacher-b', shiftTitle: 'Fake' }),
+    '65. Teacher CANNOT forge shift_assigned to another teacher');
+  await assertFailure(notif(teacherADb, { type: 'shift_released', recipientId: 'teacher-b' }),
+    '66. Teacher CANNOT aim an alert type at another teacher');
+  await assertFailure(notif(teacherADb, { type: 'buzz_like', actorName: 'Teacher A' }),
+    '67. Teacher CANNOT create buzz_like without forAdmin flag');
+  await assertFailure(notif(teacherADb, { type: 'shift_released', recipientId: 'admin', status: 'read' }),
+    '68. Teacher CANNOT create a pre-read notification');
+
   console.log('\n📋 TEST SUMMARY:');
-  console.log(`✅ Passed: ${passed} / 58`);
+  console.log(`✅ Passed: ${passed} / 68`);
   if (failed > 0) {
-    console.error(`❌ Failed: ${failed} / 58`);
+    console.error(`❌ Failed: ${failed} / 68`);
     process.exit(1);
   } else {
-    console.log('🎉 All 58 security assertions passed successfully!');
+    console.log('🎉 All 68 security assertions passed successfully!');
     process.exit(0);
   }
 }

@@ -109,7 +109,21 @@ service cloud.firestore {
     // ── Notifications ─────────────────────────────────────────────────────────
     match /notifications/{notifId} {
       allow read:   if isAdmin() || (isSignedIn() && resource.data.recipientId == request.auth.uid);
-      allow create: if isSignedIn();
+      // Clients may only create the exact notification shapes the apps produce.
+      // (Server-side types — shift_updated, shift_cancelled, open_shift_posted,
+      // shift_assigned_admin, claim/confirm alerts — come from Cloud Functions
+      // via the Admin SDK and bypass these rules.)
+      // NOTE: adding a new client-created type requires updating this list AND
+      // the rules test suite — that friction is intentional.
+      allow create: if isAdmin()
+        || (isSignedIn()
+            && request.resource.data.status == 'unread'
+            && (
+              (request.resource.data.type in ['first_login', 'form_submitted', 'shift_released', 'shift_declined']
+                && request.resource.data.recipientId == 'admin')
+              || (request.resource.data.type in ['buzz_like', 'buzz_comment']
+                && request.resource.data.forAdmin == true)
+            ));
       allow update: if isAdmin() || (isSignedIn() && resource.data.recipientId == request.auth.uid);
       allow delete: if isAdmin();
     }
