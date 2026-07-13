@@ -7,6 +7,7 @@ import useTeacherStore from '../../stores/useTeacherStore'
 import useDirectoryStore from '../../stores/useDirectoryStore'
 import Avatar          from '../../components/Avatar'
 import { uid }         from '../../utils/helpers'
+import { resizeFile }  from '../../utils/resizeFile'
 
 const EMOJIS = ['👍','❤️','😂','🎉','🔥','👀','🙌','✅','😮','😢']
 
