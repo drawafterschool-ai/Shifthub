@@ -65,7 +65,9 @@ const getChatProfile = (chat, currentUser, instructors) => {
 // ── Forward sheet ─────────────────────────────────────────────────────────────
 function ForwardSheet({ text, chats, onClose, onForward }) {
   const [q, setQ] = useState('')
-  const myChats   = chats.filter(c => c.isGroup || (c.members || []).includes(user?.uid))
+  // Teacher chats are already member-scoped by the store's query (and by
+  // security rules), so no additional membership filter is needed here.
+  const myChats   = chats
   const filtered  = myChats.filter(c => (c.name || '').toLowerCase().includes(q.toLowerCase()))
   return (
     <div className="absolute inset-0 z-50 flex flex-col justify-end bg-black/50" onClick={onClose}>
