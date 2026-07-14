@@ -66,7 +66,8 @@ export default function ScheduleView() {
   const [noteModal,  setNoteModal]  = useState(null)  // { shift, flow: 'reject'|'release' }
 
   const today    = new Date().toISOString().slice(0, 10)
-  const upcoming = myShifts.filter(s => s.date >= today)
+  const maxDate  = new Date(Date.now() + 8 * 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  const upcoming = myShifts.filter(s => s.date >= today && s.date <= maxDate)
   const past     = myShifts.filter(s => s.date < today)
 
   const uid = user?.uid
@@ -151,7 +152,7 @@ export default function ScheduleView() {
         {upcoming.length > 0 && (
           <section>
             <p className="text-xs font-bold text-muted uppercase tracking-widest mb-3">
-              Upcoming · {upcoming.length}
+              Upcoming (Next 8 Weeks) · {upcoming.length}
             </p>
             <div className="flex flex-col gap-3">
               {upcoming.map(s => (
