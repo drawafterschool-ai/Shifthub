@@ -1212,10 +1212,23 @@ function DMPicker({ chats, onClose, onStartDM, currentUserId, dmStarting }) {
     )
   }, [])
 
-  const filtered = users.filter(u =>
-    u.id !== currentUserId &&
-    `${u.firstName} ${u.lastName}`.toLowerCase().includes(q.toLowerCase())
-  )
+  const getUserDisplayName = (u) => {
+    if (u.firstName || u.lastName) {
+      return `${u.firstName || ''} ${u.lastName || ''}`.trim()
+    }
+    if (u.displayName) return u.displayName
+    if (u.name) return u.name
+    if (u.email) return u.email.split('@')[0]
+    return ['owner', 'admin'].includes(u.role) ? 'Admin' : 'User'
+  }
+
+  const filtered = users.filter(u => {
+    if (u.id === currentUserId) return false
+    const name = getUserDisplayName(u).toLowerCase()
+    const email = (u.email || '').toLowerCase()
+    const query = q.toLowerCase()
+    return name.includes(query) || email.includes(query)
+  })
 
   return (
     <div className="absolute inset-0 z-50 flex flex-col justify-end bg-black/50" onClick={onClose}>
@@ -1238,11 +1251,11 @@ function DMPicker({ chats, onClose, onStartDM, currentUserId, dmStarting }) {
           ) : filtered.map(u => (
             <button key={u.id}
               disabled={dmStarting}
-              onClick={() => onStartDM(u.id, `${u.firstName} ${u.lastName || ''}`.trim())}
+              onClick={() => onStartDM(u.id, getUserDisplayName(u))}
               className="flex items-center gap-3 w-full px-4 py-3 text-left cursor-pointer bg-transparent border-none border-b border-app/20 hover:bg-raised disabled:opacity-50">
-              <Avatar firstName={u.firstName} lastName={u.lastName} color={u.color} photo={u.photo} size={40} />
+              <Avatar firstName={u.firstName || getUserDisplayName(u)} lastName={u.lastName || ''} color={u.color} photo={u.photo} size={40} />
               <div>
-                <p className="text-sm font-semibold text-primary">{u.firstName} {u.lastName}</p>
+                <p className="text-sm font-semibold text-primary">{getUserDisplayName(u)}</p>
                 <p className="text-xs text-dim capitalize">{u.role || 'teacher'}</p>
               </div>
             </button>
