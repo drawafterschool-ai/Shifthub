@@ -345,6 +345,15 @@ export default function ChatView() {
     if (activeChatId && user) markChatRead(activeChatId, user.uid)
   }, [activeMsgs.length, activeChatId])
 
+  // Auto-grow textarea height as user types
+  useEffect(() => {
+    const el = inputRef.current
+    if (el) {
+      el.style.height = 'auto'
+      el.style.height = `${el.scrollHeight}px`
+    }
+  }, [msgText, showList])
+
   const handleFileUpload = async (e) => {
     const files = Array.from(e.target.files); if (!files.length) return
     setUploading(true)
