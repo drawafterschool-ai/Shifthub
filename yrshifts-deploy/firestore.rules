@@ -26,7 +26,7 @@ service cloud.firestore {
       allow update: if isAdmin()
         || (isSignedIn()
             && request.auth.uid == userId
-            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']));
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'hourlyTier']));
     }
 
     // ── Shifts ────────────────────────────────────────────────────────────────

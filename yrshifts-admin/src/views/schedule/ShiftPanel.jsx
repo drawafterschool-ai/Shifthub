@@ -267,7 +267,24 @@ export default function ShiftPanel({ shift, dateKey, isNew, onClose, onSaved, sm
 
   // ── Conflict highlights ───────────────────────────────────────────────────
   const getConflictText = (instructor) => {
-    if (!instructor || !instructor.unavailability || !instructor.unavailability.length) return null
+    if (!instructor) return null
+
+    const datesToCheck = effectiveDates.length ? effectiveDates : [shift.date || dateKey].filter(Boolean)
+
+    const fmtDayOff = (dateStr) => {
+      const dt = new Date(dateStr + 'T12:00:00')
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+      return `${monthNames[dt.getMonth()]} ${dt.getDate()}`
+    }
+
+    // 1. Check specific dates off first (takes precedence)
+    for (const dateStr of datesToCheck) {
+      if (instructor.unavailableDates && instructor.unavailableDates.includes(dateStr)) {
+        return `Unavailable on ${fmtDayOff(dateStr)} (day off)`
+      }
+    }
+
+    if (!instructor.unavailability || !instructor.unavailability.length) return null
     
     const shiftStart = timeTo24(start)
     let shiftEnd = timeTo24(end)
@@ -717,7 +734,9 @@ export default function ShiftPanel({ shift, dateKey, isNew, onClose, onSaved, sm
                       <p className="text-[11px] opacity-80 mt-0.5">
                         {activeConflict.type === 'overlap' 
                           ? `This teacher is already assigned to an overlapping shift (${activeConflict.text}).`
-                          : `This teacher is marked as unavailable during this shift's time (${activeConflict.text}).`}
+                          : activeConflict.text.includes('day off')
+                            ? activeConflict.text
+                            : `This teacher is marked as unavailable during this shift's time (${activeConflict.text}).`}
                       </p>
                     </div>
                   </div>

@@ -115,7 +115,7 @@ async function runTests() {
     }
   }
 
-  console.log('\n🏃 Running 68 rules assertions...\n');
+  console.log('\n🏃 Running 71 rules assertions...\n');
 
   // ── CHATS & MESSAGES (19 Assertions) ───────────────────────────────────────
   console.log('--- Chats & Messages ---');
@@ -345,13 +345,27 @@ async function runTests() {
   await assertFailure(notif(teacherADb, { type: 'shift_released', recipientId: 'admin', status: 'read' }),
     '68. Teacher CANNOT create a pre-read notification');
 
+  // ── Availability & specific dates off (3 Assertions)
+  await assertFailure(
+    updateDoc(doc(teacherADb, 'users', 'teacher-a'), { hourlyTier: 'tier-2' }),
+    '69. Teacher cannot self-edit payroll hourlyTier'
+  );
+  await assertSuccess(
+    updateDoc(doc(teacherADb, 'users', 'teacher-a'), { unavailability: [{ day: 'Mon', start: '09:00', end: '17:00' }] }),
+    '70. Teacher can edit own weekly availability slots'
+  );
+  await assertSuccess(
+    updateDoc(doc(teacherADb, 'users', 'teacher-a'), { unavailableDates: ['2026-08-03'] }),
+    '71. Teacher can edit own specific unavailable dates'
+  );
+
   console.log('\n📋 TEST SUMMARY:');
-  console.log(`✅ Passed: ${passed} / 68`);
+  console.log(`✅ Passed: ${passed} / 71`);
   if (failed > 0) {
-    console.error(`❌ Failed: ${failed} / 68`);
+    console.error(`❌ Failed: ${failed} / 71`);
     process.exit(1);
   } else {
-    console.log('🎉 All 68 security assertions passed successfully!');
+    console.log('🎉 All 71 security assertions passed successfully!');
     process.exit(0);
   }
 }

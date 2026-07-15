@@ -8,6 +8,71 @@ import { isBiometricsSupported, registerBiometrics, disableBiometrics, isBiometr
 
 const INPUT = "w-full bg-raised border border-app rounded-xl px-4 py-3 text-sm text-primary placeholder:text-dim outline-none focus:border-accent transition-colors"
 
+// ── Calendar popup for picking specific unavailable dates ────────────────────
+function DateCalendarModal({ selected, onClose, onSave }) {
+  const todayStr = (() => {
+    const n = new Date()
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
+  })()
+  const [cursor, setCursor] = useState(() => { const n = new Date(); return { y: n.getFullYear(), m: n.getMonth() } })
+  const [picked, setPicked] = useState(new Set(selected))
+
+  const monthName = new Date(cursor.y, cursor.m, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+  const firstDow  = new Date(cursor.y, cursor.m, 1).getDay()
+  const daysInMon = new Date(cursor.y, cursor.m + 1, 0).getDate()
+  const dateStr   = (d) => `${cursor.y}-${String(cursor.m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+
+  const toggle = (ds) => {
+    if (ds < todayStr) return               // past days are not selectable
+    setPicked(prev => { const n = new Set(prev); n.has(ds) ? n.delete(ds) : n.add(ds); return n })
+  }
+  const shiftMonth = (delta) => setCursor(c => {
+    const d = new Date(c.y, c.m + delta, 1)
+    return { y: d.getFullYear(), m: d.getMonth() }
+  })
+
+  return (
+    <div className="fixed inset-0 z-[3000] bg-black/70 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="w-full max-w-sm bg-card border border-app rounded-3xl p-4 flex flex-col gap-3"
+        onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <button onClick={() => shiftMonth(-1)} className="w-9 h-9 rounded-xl bg-raised border border-app text-primary cursor-pointer">‹</button>
+          <p className="text-sm font-bold text-primary">{monthName}</p>
+          <button onClick={() => shiftMonth(1)} className="w-9 h-9 rounded-xl bg-raised border border-app text-primary cursor-pointer">›</button>
+        </div>
+        <div className="grid grid-cols-7 gap-1 text-center">
+          {['S','M','T','W','T','F','S'].map((d, i) => (
+            <span key={i} className="text-2xs font-bold text-dim py-1">{d}</span>
+          ))}
+          {Array.from({ length: firstDow }).map((_, i) => <span key={`b${i}`} />)}
+          {Array.from({ length: daysInMon }).map((_, i) => {
+            const d = i + 1
+            const ds = dateStr(d)
+            const isPast = ds < todayStr
+            const isSel  = picked.has(ds)
+            return (
+              <button key={ds} onClick={() => toggle(ds)} disabled={isPast}
+                className={`aspect-square rounded-lg text-xs font-semibold cursor-pointer border transition-colors
+                  ${isSel ? 'bg-danger text-white border-danger'
+                          : isPast ? 'bg-transparent text-dim border-transparent cursor-default'
+                                   : 'bg-raised text-primary border-app hover:border-accent'}`}>
+                {d}
+              </button>
+            )
+          })}
+        </div>
+        <p className="text-2xs text-dim text-center">Tap dates you are <strong>unavailable</strong> · red = off</p>
+        <div className="flex gap-2">
+          <button onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl bg-raised border border-app text-xs font-bold text-primary cursor-pointer">Cancel</button>
+          <button onClick={() => onSave([...picked].sort())}
+            className="flex-1 py-2.5 rounded-xl bg-accent text-white text-xs font-bold border-none cursor-pointer">Apply dates</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function ProfileView() {
   const { user, userProfile } = useAuthStore()
 
@@ -69,6 +134,12 @@ export default function ProfileView() {
   }
 
   const [unavailability, setUnavailability] = useState(userProfile?.unavailability || [])
+  const [unavailableDates, setUnavailableDates] = useState(userProfile?.unavailableDates || [])
+  const [showDateCal, setShowDateCal] = useState(false)
+  // Late-arriving profile: initialise dates once when the profile first loads
+  useEffect(() => {
+    if (userProfile) setUnavailableDates(userProfile.unavailableDates || [])
+  }, [!!userProfile])
   const [addDay, setAddDay] = useState('Mon')
   const [addStart, setAddStart] = useState('09:00')
   const [addEnd, setAddEnd] = useState('17:00')
@@ -98,7 +169,7 @@ export default function ProfileView() {
   const handleSaveAvailability = async () => {
     setSavingAvail(true)
     try {
-      await updateDoc(doc(db, 'users', user.uid), { unavailability })
+      await updateDoc(doc(db, 'users', user.uid), { unavailability, unavailableDates })
       showToast('Availability settings saved!')
     } catch (e) {
       showToast('Failed to save availability', false)
@@ -257,6 +328,37 @@ export default function ProfileView() {
             <p className="text-xs text-dim text-center py-4 bg-raised rounded-xl border border-app border-dashed">
               You are fully available! No unavailability slots added.
             </p>
+          )}
+
+          {/* Specific unavailable dates */}
+          <div className="border-t border-app pt-4 flex flex-col gap-3">
+            <p className="text-xs font-bold text-muted uppercase tracking-wide">Specific Dates Off</p>
+            <p className="text-xs text-muted leading-relaxed">
+              Away on certain days (vacation, appointments)? Pick them on the calendar — schedulers see those days flagged too.
+            </p>
+            {unavailableDates.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {[...unavailableDates].sort().map(d => (
+                  <span key={d} className="inline-flex items-center gap-1.5 bg-raised border border-app rounded-lg px-2.5 py-1.5 text-xs text-primary">
+                    {new Date(d + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                    <button onClick={() => setUnavailableDates(prev => prev.filter(x => x !== d))}
+                      className="text-danger bg-transparent border-none cursor-pointer text-sm leading-none">✕</button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <button onClick={() => setShowDateCal(true)}
+              className="w-full py-2.5 rounded-xl bg-raised border border-app text-xs font-bold text-primary hover:text-accent hover:border-accent transition-colors cursor-pointer">
+              📅 Pick dates on calendar
+            </button>
+          </div>
+
+          {showDateCal && (
+            <DateCalendarModal
+              selected={unavailableDates}
+              onClose={() => setShowDateCal(false)}
+              onSave={(dates) => { setUnavailableDates(dates); setShowDateCal(false) }}
+            />
           )}
 
           {/* Add Form */}

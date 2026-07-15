@@ -41,7 +41,13 @@ export default function ShiftChip({
   const { instructors } = useDirectoryStore()
   const instructor = instructors?.find(i => i.id === shift.instructorId)
   const hasConflict = (() => {
-    if (!instructor || !instructor.unavailability || !instructor.unavailability.length || !shift.date) return false
+    if (!instructor || !shift.date) return false
+    
+    if (instructor.unavailableDates && instructor.unavailableDates.includes(shift.date)) {
+      return true
+    }
+
+    if (!instructor.unavailability || !instructor.unavailability.length) return false
     
     const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
     const d = new Date(shift.date + 'T12:00:00')
