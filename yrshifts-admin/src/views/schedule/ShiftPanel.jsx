@@ -268,23 +268,9 @@ export default function ShiftPanel({ shift, dateKey, isNew, onClose, onSaved, sm
   // ── Conflict highlights ───────────────────────────────────────────────────
   const getConflictText = (instructor) => {
     if (!instructor) return null
-
-    const datesToCheck = effectiveDates.length ? effectiveDates : [shift.date || dateKey].filter(Boolean)
-
-    const fmtDayOff = (dateStr) => {
-      const dt = new Date(dateStr + 'T12:00:00')
-      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-      return `${monthNames[dt.getMonth()]} ${dt.getDate()}`
-    }
-
-    // 1. Check specific dates off first (takes precedence)
-    for (const dateStr of datesToCheck) {
-      if (instructor.unavailableDates && instructor.unavailableDates.includes(dateStr)) {
-        return `Unavailable on ${fmtDayOff(dateStr)} (day off)`
-      }
-    }
-
-    if (!instructor.unavailability || !instructor.unavailability.length) return null
+    const hasWeekly = instructor.unavailability && instructor.unavailability.length
+    const dateSet   = instructor.unavailableDates || []
+    if (!hasWeekly && !dateSet.length) return null
     
     const shiftStart = timeTo24(start)
     let shiftEnd = timeTo24(end)
@@ -301,11 +287,18 @@ export default function ShiftPanel({ shift, dateKey, isNew, onClose, onSaved, sm
     }
 
     const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    const datesToCheck = effectiveDates.length ? effectiveDates : [shift.date || dateKey].filter(Boolean)
 
     for (const dateStr of datesToCheck) {
       const d = new Date(dateStr + 'T12:00:00')
       if (isNaN(d.getTime())) continue
       const dayAbbrev = daysOfWeek[d.getDay()]
+
+      // Specific dates off (all-day) take precedence over weekly slots
+      if (dateSet.includes(dateStr)) {
+        return `Unavailable on ${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} (day off)`
+      }
+      if (!hasWeekly) continue
 
       for (const slot of instructor.unavailability) {
         if (slot.day === dayAbbrev) {
@@ -496,7 +489,7 @@ export default function ShiftPanel({ shift, dateKey, isNew, onClose, onSaved, sm
     }
   }
 
-  const handleDelete = async (scope) => {
+  const handleConfirmDelete = async (scope) => {
     try {
       const count = await deleteShift(shift, scope, dateKey)
       onSaved(`🗑 Deleted ${count} shift${count !== 1 ? 's' : ''}`)
@@ -695,7 +688,7 @@ export default function ShiftPanel({ shift, dateKey, isNew, onClose, onSaved, sm
                       }
                       
                       let suffix = ''
-                      if (conflict) suffix = ` (⚠️ Unavail: ${conflict})`
+                      if (conflict) suffix = ` (⚠️ ${conflict})`
                       else if (overlap) suffix = ' (⚠️ Overlaps Shift)'
 
                       return (
@@ -869,7 +862,7 @@ export default function ShiftPanel({ shift, dateKey, isNew, onClose, onSaved, sm
       {confirmDel && (
         <DeleteScopeModal
           onClose={() => setConfirmDel(false)}
-          onConfirm={scope => { handleDelete(scope); setConfirmDel(false) }}
+          onConfirm={scope => { handleConfirmDelete(scope); setConfirmDel(false) }}
         />
       )}
 
