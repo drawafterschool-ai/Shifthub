@@ -4,6 +4,9 @@ import useDirectoryStore from '../../stores/useDirectoryStore'
 import useSettingsStore  from '../../stores/useSettingsStore'
 import { toKey, addDays, fmtDateLong } from '../../utils/date'
 import { isToday } from '../../utils/date'
+import { useSms } from '../../hooks/useSms'
+import AdminShiftDetailSheet from '../../components/AdminShiftDetailSheet'
+import ShiftPanel from './ShiftPanel'
 
 function fmtShortDate(d) {
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
@@ -23,9 +26,16 @@ function timeToMinutes(timeStr) {
 }
 
 export default function MobileDayView() {
+  const sms = useSms()
   const { rawShifts, jobs, loading } = useScheduleStore()
   const { instructors }              = useDirectoryStore()
   const [offset, setOffset]          = useState(0)
+
+  const [mobileDetail, setMobileDetail] = useState(null)
+  const [ctx, setCtx]                   = useState(null)
+  const [toast, setToast]               = useState(null)
+
+  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2500) }
 
   const base = new Date(); base.setHours(0,0,0,0)
   const day  = addDays(base, offset)
@@ -78,8 +88,9 @@ export default function MobileDayView() {
           const statusColor = { confirmed: '#34D399', rejected: '#F87171', pending: '#FBBF24' }[s.confirmationStatus]
 
           return (
-            <div key={s.id} className="bg-card border border-app rounded-2xl p-4"
-              style={ job?.color ? { borderLeftColor: job.color, borderLeftWidth: 3 } : {} }>
+            <div key={s.id} className="bg-card border border-app rounded-2xl p-4 cursor-pointer"
+              style={ job?.color ? { borderLeftColor: job.color, borderLeftWidth: 3 } : {} }
+              onClick={() => setMobileDetail(s)}>
               <div className="flex items-start justify-between gap-2 mb-2">
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-bold text-primary truncate">{s.title || 'Shift'}</p>
@@ -120,6 +131,40 @@ export default function MobileDayView() {
           )
         })}
       </div>
+
+      {mobileDetail && (
+        <AdminShiftDetailSheet
+          shift={mobileDetail}
+          jobs={jobs}
+          instructors={instructors}
+          onClose={() => setMobileDetail(null)}
+          onEdit={() => {
+            const s = mobileDetail
+            setMobileDetail(null)
+            setCtx({ shift: s, dateKey: s.date, isNew: false })
+          }}
+        />
+      )}
+
+      {ctx && (
+        <ShiftPanel
+          shift={ctx.shift}
+          dateKey={ctx.dateKey}
+          isNew={ctx.isNew}
+          onClose={() => setCtx(null)}
+          onSaved={(msg) => {
+            showToast(msg)
+            setCtx(null)
+          }}
+          sms={sms}
+        />
+      )}
+
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 px-5 py-2.5 bg-card border border-app text-primary text-sm font-semibold rounded-xl shadow-xl z-[9999] animate-fade-in whitespace-nowrap">
+          {toast}
+        </div>
+      )}
     </div>
   )
 }
