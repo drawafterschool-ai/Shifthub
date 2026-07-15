@@ -301,7 +301,6 @@ export default function ShiftPanel({ shift, dateKey, isNew, onClose, onSaved, sm
     }
 
     const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-    const datesToCheck = effectiveDates.length ? effectiveDates : [shift.date || dateKey].filter(Boolean)
 
     for (const dateStr of datesToCheck) {
       const d = new Date(dateStr + 'T12:00:00')
