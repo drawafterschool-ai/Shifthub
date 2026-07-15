@@ -345,19 +345,15 @@ async function runTests() {
   await assertFailure(notif(teacherADb, { type: 'shift_released', recipientId: 'admin', status: 'read' }),
     '68. Teacher CANNOT create a pre-read notification');
 
-  // ── Availability & specific dates off (3 Assertions)
-  await assertFailure(
-    updateDoc(doc(teacherADb, 'users', 'teacher-a'), { hourlyTier: 'tier-2' }),
-    '69. Teacher cannot self-edit payroll hourlyTier'
-  );
-  await assertSuccess(
-    updateDoc(doc(teacherADb, 'users', 'teacher-a'), { unavailability: [{ day: 'Mon', start: '09:00', end: '17:00' }] }),
-    '70. Teacher can edit own weekly availability slots'
-  );
-  await assertSuccess(
-    updateDoc(doc(teacherADb, 'users', 'teacher-a'), { unavailableDates: ['2026-08-03'] }),
-    '71. Teacher can edit own specific unavailable dates'
-  );
+
+  // ── User self-edit boundaries ────────────────────────────────────────────
+  console.log('\n👤 User self-edit boundaries');
+  await assertFailure(updateDoc(doc(teacherADb, 'users', 'teacher-a'), { hourlyTier: 5 }),
+    '69. Teacher CANNOT edit their own hourlyTier (pay rate)');
+  await assertSuccess(updateDoc(doc(teacherADb, 'users', 'teacher-a'), { unavailability: [{ day: 'Mon', start: '09:00', end: '15:00' }] }),
+    '70. Teacher CAN edit their own weekly unavailability slots');
+  await assertSuccess(updateDoc(doc(teacherADb, 'users', 'teacher-a'), { unavailableDates: ['2026-08-03', '2026-08-04'] }),
+    '71. Teacher CAN edit their own specific unavailable dates');
 
   console.log('\n📋 TEST SUMMARY:');
   console.log(`✅ Passed: ${passed} / 71`);
