@@ -21,13 +21,14 @@ export default function AdminShiftDetailSheet({ shift, jobs, instructors, onClos
   )
 
   const mapsUrl = shift.address
-    ? `https://maps.apple.com/?q=${encodeURIComponent(shift.address)}`
+    ? `https://maps.google.com/?q=${encodeURIComponent(shift.address)}`
     : null
 
   return (
     <div className="fixed inset-0 z-[3500] flex flex-col justify-end bg-black/60 md:hidden"
       onClick={onClose}>
       <div className="bg-surface rounded-t-3xl max-h-[85vh] flex flex-col"
+        style={{ background: 'var(--dropdown-bg)', backdropFilter: 'none', WebkitBackdropFilter: 'none' }}
         onClick={e => e.stopPropagation()}>
 
         {/* Handle */}
