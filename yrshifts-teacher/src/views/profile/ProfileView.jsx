@@ -136,10 +136,15 @@ export default function ProfileView() {
   const [unavailability, setUnavailability] = useState(userProfile?.unavailability || [])
   const [unavailableDates, setUnavailableDates] = useState(userProfile?.unavailableDates || [])
   const [showDateCal, setShowDateCal] = useState(false)
-  // Late-arriving profile: initialise dates once when the profile first loads
+
+  // Late-arriving profile: initialise slots and dates once when the profile first loads, preserving local edits
   useEffect(() => {
-    if (userProfile) setUnavailableDates(userProfile.unavailableDates || [])
-  }, [!!userProfile])
+    if (userProfile) {
+      setUnavailability(prev => prev.length === 0 ? (userProfile.unavailability || []) : prev)
+      setUnavailableDates(prev => prev.length === 0 ? (userProfile.unavailableDates || []) : prev)
+    }
+  }, [userProfile])
+
   const [addDay, setAddDay] = useState('Mon')
   const [addStart, setAddStart] = useState('09:00')
   const [addEnd, setAddEnd] = useState('17:00')
@@ -172,7 +177,8 @@ export default function ProfileView() {
       await updateDoc(doc(db, 'users', user.uid), { unavailability, unavailableDates })
       showToast('Availability settings saved!')
     } catch (e) {
-      showToast('Failed to save availability', false)
+      console.error('Error saving availability settings:', e)
+      showToast(`Failed to save availability: ${e.message || e}`, false)
     } finally {
       setSavingAvail(false)
     }
