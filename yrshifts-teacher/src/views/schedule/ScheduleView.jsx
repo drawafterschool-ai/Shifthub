@@ -61,9 +61,10 @@ export default function ScheduleView() {
   } = useTeacherStore()
   const { user, userProfile } = useAuthStore()
 
-  const [busy,       setBusy]       = useState({})
-  const [toast,      setToast]      = useState(null)
-  const [noteModal,  setNoteModal]  = useState(null)  // { shift, flow: 'reject'|'release' }
+  const [busy,           setBusy]           = useState({})
+  const [toast,          setToast]          = useState(null)
+  const [noteModal,      setNoteModal]      = useState(null)  // { shift, flow: 'reject'|'release' }
+  const [activeDetailId, setActiveDetailId] = useState(null)
 
   const today    = new Date().toISOString().slice(0, 10)
   const maxDate  = new Date(Date.now() + 8 * 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
@@ -78,6 +79,7 @@ export default function ScheduleView() {
   }
 
   const handleConfirm = async (shift) => {
+    setActiveDetailId(null)
     setBusy(b => ({ ...b, [shift.id]: 'confirming' }))
     try {
       await confirmShift(shift, uid, userProfile?.firstName)
@@ -87,10 +89,16 @@ export default function ScheduleView() {
   }
 
   // Reject assigned shift — requires note
-  const handleReject = (shift) => setNoteModal({ shift, flow: 'reject' })
+  const handleReject = (shift) => {
+    setActiveDetailId(null)
+    setNoteModal({ shift, flow: 'reject' })
+  }
 
   // Release assigned shift — requires note
-  const handleRelease = (shift) => setNoteModal({ shift, flow: 'release' })
+  const handleRelease = (shift) => {
+    setActiveDetailId(null)
+    setNoteModal({ shift, flow: 'release' })
+  }
 
   const handleNoteSubmit = async (note) => {
     if (!noteModal) return
@@ -156,7 +164,13 @@ export default function ScheduleView() {
             </p>
             <div className="flex flex-col gap-3">
               {upcoming.map(s => (
-                <ShiftCard key={s.id} shift={s}>
+                <ShiftCard
+                  key={s.id}
+                  shift={s}
+                  showDetail={activeDetailId === s.id}
+                  onShowDetail={() => setActiveDetailId(s.id)}
+                  onCloseDetail={() => setActiveDetailId(null)}
+                >
 
                   {/* Pending — confirm or reject */}
                   {(s.confirmationStatus === 'pending' || (!s.confirmationStatus && s.instructorId)) && !busy[s.id] && (

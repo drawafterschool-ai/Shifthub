@@ -106,8 +106,12 @@ function ShiftDetailModal({ shift, onClose, actions }) {
   )
 }
 
-export default function ShiftCard({ shift, children }) {
-  const [showDetail, setShowDetail] = useState(false)
+export default function ShiftCard({ shift, showDetail, onShowDetail, onCloseDetail, children }) {
+  const [localShow, setLocalShow] = useState(false)
+  const isControlled = showDetail !== undefined
+  const visible = isControlled ? showDetail : localShow
+  const setVisible = isControlled ? (val => val ? onShowDetail() : onCloseDetail()) : setLocalShow
+
   const dot   = STATUS_DOT[shift.confirmationStatus]
   const label = STATUS_LABEL[shift.confirmationStatus]
 
@@ -120,7 +124,7 @@ export default function ShiftCard({ shift, children }) {
   return (
     <>
       <div className="bg-card border border-app rounded-2xl overflow-hidden active:scale-[0.99] transition-transform cursor-pointer"
-        onClick={() => setShowDetail(true)}>
+        onClick={() => setVisible(true)}>
         <div className="flex gap-3 p-3.5">
           {/* Date box */}
           <div className="w-11 h-11 rounded-xl bg-raised border border-app flex flex-col items-center justify-center flex-shrink-0">
@@ -157,8 +161,8 @@ export default function ShiftCard({ shift, children }) {
         )}
       </div>
 
-      {showDetail && (
-        <ShiftDetailModal shift={shift} onClose={() => setShowDetail(false)} actions={children} />
+      {visible && (
+        <ShiftDetailModal shift={shift} onClose={() => setVisible(false)} actions={children} />
       )}
     </>
   )

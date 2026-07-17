@@ -6,10 +6,12 @@ import ShiftCard       from '../../components/ShiftCard'
 export default function OpenView() {
   const { openShifts, claimShift } = useTeacherStore()
   const { user, userProfile }      = useAuthStore()
-  const [busy,    setBusy]    = useState({})
-  const [claimed, setClaimed] = useState(new Set())
+  const [busy,           setBusy]           = useState({})
+  const [claimed,        setClaimed]        = useState(new Set())
+  const [activeDetailId, setActiveDetailId] = useState(null)
 
   const handleClaim = async (shift) => {
+    setActiveDetailId(null)
     setBusy(b => ({ ...b, [shift.id]: true }))
     try {
       await claimShift(shift, user.uid, userProfile?.firstName || 'Teacher')
@@ -34,7 +36,13 @@ export default function OpenView() {
             {openShifts.map(s => {
               const isClaimed = claimed.has(s.id)
               return (
-                <ShiftCard key={s.id} shift={{ ...s, confirmationStatus: undefined }}>
+                <ShiftCard
+                  key={s.id}
+                  shift={{ ...s, confirmationStatus: undefined }}
+                  showDetail={activeDetailId === s.id}
+                  onShowDetail={() => setActiveDetailId(s.id)}
+                  onCloseDetail={() => setActiveDetailId(null)}
+                >
                   {isClaimed ? (
                     <div className="py-2.5 rounded-xl bg-ok-soft border border-ok/20 text-center text-sm font-bold text-ok">
                       ✅ You claimed this shift
