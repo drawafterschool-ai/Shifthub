@@ -46,7 +46,7 @@ function PostModal({ post, userId, userName, onClose, onMarkSeen, onLike, onComm
   const bg = BACKGROUNDS.find(b => b.key === post.background) || BACKGROUNDS[0]
   const bgUrl = bg.url ? `/app/backgrounds/${bg.url}` : ''
   const cardStyle = bgUrl ? {
-    backgroundImage: `linear-gradient(rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0.75)), url(${bgUrl})`,
+    backgroundImage: `linear-gradient(rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.5)), url(${bgUrl})`,
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     color: '#1e293b',
@@ -191,7 +191,7 @@ export default function UpdatesView() {
           const bg = BACKGROUNDS.find(b => b.key === post.background) || BACKGROUNDS[0]
           const bgUrl = bg.url ? `/app/backgrounds/${bg.url}` : ''
           const cardStyle = bgUrl ? {
-            backgroundImage: `linear-gradient(rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0.75)), url(${bgUrl})`,
+            backgroundImage: `linear-gradient(rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.5)), url(${bgUrl})`,
             backgroundSize: 'cover',
             backgroundPosition: 'center',
             color: '#1e293b',

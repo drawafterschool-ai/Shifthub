@@ -113,7 +113,7 @@ function RichEditor({ value, onChange, background }) {
   const bg = BACKGROUNDS.find(b => b.key === background) || BACKGROUNDS[0]
   const bgUrl = bg.url ? `/admin/backgrounds/${bg.url}` : ''
   const editorStyle = bgUrl ? {
-    backgroundImage: `linear-gradient(rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0.75)), url(${bgUrl})`,
+    backgroundImage: `linear-gradient(rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.5)), url(${bgUrl})`,
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     color: '#1e293b',
@@ -258,7 +258,7 @@ function PostCard({ post, instructors, onEdit, onDelete, onRemind }) {
   const bg = BACKGROUNDS.find(b => b.key === post.background) || BACKGROUNDS[0]
   const bgUrl = bg.url ? `/admin/backgrounds/${bg.url}` : ''
   const cardStyle = bgUrl ? {
-    backgroundImage: `linear-gradient(rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0.75)), url(${bgUrl})`,
+    backgroundImage: `linear-gradient(rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.5)), url(${bgUrl})`,
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     color: '#1e293b',
