@@ -13,11 +13,11 @@ import Modal, { ModalHeader, ModalFooter } from '../../components/Modal'
 // ── Background choices configuration ──────────────────────────────────────────
 const BACKGROUNDS = [
   { key: 'default',    name: 'Default',      url: '',                 textCls: 'text-muted',        titleCls: 'text-primary',                  subCls: 'text-dim' },
-  { key: 'bg_bell',    name: 'Notification',  url: 'bg_bell.png',       textCls: 'text-white/95',     titleCls: 'text-white font-extrabold',     subCls: 'text-white/70' },
+  { key: 'bg_bell',    name: 'Notification',  url: 'bg_bell.png',       textCls: 'text-slate-800/95', titleCls: 'text-slate-900 font-extrabold', subCls: 'text-slate-600' },
   { key: 'bg_clouds',  name: 'Clouds',        url: 'bg_clouds.png',     textCls: 'text-slate-800/95', titleCls: 'text-slate-900 font-extrabold', subCls: 'text-slate-600' },
-  { key: 'bg_trees',   name: 'Trees',         url: 'bg_trees.png',      textCls: 'text-white/95',     titleCls: 'text-white font-extrabold',     subCls: 'text-white/70' },
+  { key: 'bg_trees',   name: 'Trees',         url: 'bg_trees.png',      textCls: 'text-slate-800/95', titleCls: 'text-slate-900 font-extrabold', subCls: 'text-slate-600' },
   { key: 'bg_snow',    name: 'Snowflakes',    url: 'bg_snowflakes.png', textCls: 'text-slate-800/95', titleCls: 'text-slate-900 font-extrabold', subCls: 'text-slate-600' },
-  { key: 'bg_doodles', name: 'Doodles',       url: 'bg_doodles.png',    textCls: 'text-white/95',     titleCls: 'text-white font-extrabold',     subCls: 'text-white/70' },
+  { key: 'bg_doodles', name: 'Doodles',       url: 'bg_doodles.png',    textCls: 'text-slate-800/95', titleCls: 'text-slate-900 font-extrabold', subCls: 'text-slate-600' },
 ]
 
 // ── Common emojis for the picker ──────────────────────────────────────────────
@@ -113,11 +113,11 @@ function RichEditor({ value, onChange, background }) {
   const bg = BACKGROUNDS.find(b => b.key === background) || BACKGROUNDS[0]
   const bgUrl = bg.url ? `/admin/backgrounds/${bg.url}` : ''
   const editorStyle = bgUrl ? {
-    backgroundImage: `url(${bgUrl})`,
+    backgroundImage: `linear-gradient(rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0.75)), url(${bgUrl})`,
     backgroundSize: 'cover',
     backgroundPosition: 'center',
-    color: bg.key === 'bg_clouds' || bg.key === 'bg_snow' ? '#1e293b' : '#ffffff',
-    textShadow: bg.key === 'bg_clouds' || bg.key === 'bg_snow' ? 'none' : '0 1px 3px rgba(0,0,0,0.5)',
+    color: '#1e293b',
+    textShadow: 'none',
   } : {
     color: 'var(--text)',
   }
@@ -258,11 +258,11 @@ function PostCard({ post, instructors, onEdit, onDelete, onRemind }) {
   const bg = BACKGROUNDS.find(b => b.key === post.background) || BACKGROUNDS[0]
   const bgUrl = bg.url ? `/admin/backgrounds/${bg.url}` : ''
   const cardStyle = bgUrl ? {
-    backgroundImage: `url(${bgUrl})`,
+    backgroundImage: `linear-gradient(rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0.75)), url(${bgUrl})`,
     backgroundSize: 'cover',
     backgroundPosition: 'center',
-    color: bg.key === 'bg_clouds' || bg.key === 'bg_snow' ? '#1e293b' : '#ffffff',
-    textShadow: bg.key === 'bg_clouds' || bg.key === 'bg_snow' ? 'none' : '0 1px 3px rgba(0,0,0,0.5)',
+    color: '#1e293b',
+    textShadow: 'none',
   } : {}
 
   return (
@@ -279,10 +279,10 @@ function PostCard({ post, instructors, onEdit, onDelete, onRemind }) {
         </div>
         <div className="flex items-center gap-1.5">
           {unseen.length > 0 && (
-            <Button small variant="ghost" onClick={onRemind} className={bgUrl ? bg.key === 'bg_clouds' || bg.key === 'bg_snow' ? 'hover:bg-slate-800/10 text-slate-700' : 'hover:bg-white/10 text-white/80' : ''}>📢 Remind ({unseen.length})</Button>
+            <Button small variant="ghost" onClick={onRemind} className={bgUrl ? 'hover:bg-slate-800/10 text-slate-700' : ''}>📢 Remind ({unseen.length})</Button>
           )}
-          <Button small variant="ghost" onClick={onEdit} className={bgUrl ? bg.key === 'bg_clouds' || bg.key === 'bg_snow' ? 'hover:bg-slate-800/10 text-slate-700' : 'hover:bg-white/10 text-white/80' : ''}>✏️</Button>
-          <button onClick={onDelete} className={`cursor-pointer bg-transparent border-none text-base ${bgUrl ? bg.key === 'bg_clouds' || bg.key === 'bg_snow' ? 'text-slate-600 hover:text-danger' : 'text-white/60 hover:text-red-400' : 'text-dim hover:text-danger'}`}>🗑</button>
+          <Button small variant="ghost" onClick={onEdit} className={bgUrl ? 'hover:bg-slate-800/10 text-slate-700' : ''}>✏️</Button>
+          <button onClick={onDelete} className={`cursor-pointer bg-transparent border-none text-base ${bgUrl ? 'text-slate-600 hover:text-danger' : 'text-dim hover:text-danger'}`}>🗑</button>
         </div>
       </div>
 
@@ -294,7 +294,7 @@ function PostCard({ post, instructors, onEdit, onDelete, onRemind }) {
 
       {/* Engagement counts */}
       {(likeCount > 0 || cmtCount > 0) && (
-        <div className={`flex items-center gap-3 mb-3 text-xs ${bgUrl ? bg.key === 'bg_clouds' || bg.key === 'bg_snow' ? 'text-slate-600' : 'text-white/70' : 'text-dim'}`}>
+        <div className={`flex items-center gap-3 mb-3 text-xs ${bgUrl ? 'text-slate-600' : 'text-dim'}`}>
           {likeCount > 0 && <span>❤️ {likeCount}</span>}
           {cmtCount  > 0 && <span>💬 {cmtCount}</span>}
         </div>
@@ -303,8 +303,8 @@ function PostCard({ post, instructors, onEdit, onDelete, onRemind }) {
       {/* Seen progress */}
       <div>
         <div className="flex items-center justify-between mb-1.5">
-          <span className={`text-xs font-semibold ${bgUrl ? bg.key === 'bg_clouds' || bg.key === 'bg_snow' ? 'text-slate-700' : 'text-white/80' : 'text-muted'}`}>Seen by {seenCount} / {totalInst}</span>
-          <button onClick={() => setExpanded(v => !v)} className={`text-xs font-semibold cursor-pointer bg-transparent border-none ${bgUrl ? bg.key === 'bg_clouds' || bg.key === 'bg_snow' ? 'text-accent' : 'text-white hover:text-white/80' : 'text-accent'}`}>
+          <span className={`text-xs font-semibold ${bgUrl ? 'text-slate-700' : 'text-muted'}`}>Seen by {seenCount} / {totalInst}</span>
+          <button onClick={() => setExpanded(v => !v)} className={`text-xs font-semibold cursor-pointer bg-transparent border-none text-accent`}>
             {expanded ? 'Hide' : 'Show all'}
           </button>
         </div>

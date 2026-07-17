@@ -9,11 +9,11 @@ import useAuthStore    from '../../stores/useAuthStore'
 
 const BACKGROUNDS = [
   { key: 'default',    name: 'Default',      url: '',                 textCls: 'text-muted',        titleCls: 'text-primary',                  subCls: 'text-dim' },
-  { key: 'bg_bell',    name: 'Notification',  url: 'bg_bell.png',       textCls: 'text-white/95',     titleCls: 'text-white font-extrabold',     subCls: 'text-white/70' },
+  { key: 'bg_bell',    name: 'Notification',  url: 'bg_bell.png',       textCls: 'text-slate-800/95', titleCls: 'text-slate-900 font-extrabold', subCls: 'text-slate-600' },
   { key: 'bg_clouds',  name: 'Clouds',        url: 'bg_clouds.png',     textCls: 'text-slate-800/95', titleCls: 'text-slate-900 font-extrabold', subCls: 'text-slate-600' },
-  { key: 'bg_trees',   name: 'Trees',         url: 'bg_trees.png',      textCls: 'text-white/95',     titleCls: 'text-white font-extrabold',     subCls: 'text-white/70' },
+  { key: 'bg_trees',   name: 'Trees',         url: 'bg_trees.png',      textCls: 'text-slate-800/95', titleCls: 'text-slate-900 font-extrabold', subCls: 'text-slate-600' },
   { key: 'bg_snow',    name: 'Snowflakes',    url: 'bg_snowflakes.png', textCls: 'text-slate-800/95', titleCls: 'text-slate-900 font-extrabold', subCls: 'text-slate-600' },
-  { key: 'bg_doodles', name: 'Doodles',       url: 'bg_doodles.png',    textCls: 'text-white/95',     titleCls: 'text-white font-extrabold',     subCls: 'text-white/70' },
+  { key: 'bg_doodles', name: 'Doodles',       url: 'bg_doodles.png',    textCls: 'text-slate-800/95', titleCls: 'text-slate-900 font-extrabold', subCls: 'text-slate-600' },
 ]
 
 function fmtDate(ts) {
@@ -46,11 +46,11 @@ function PostModal({ post, userId, userName, onClose, onMarkSeen, onLike, onComm
   const bg = BACKGROUNDS.find(b => b.key === post.background) || BACKGROUNDS[0]
   const bgUrl = bg.url ? `/app/backgrounds/${bg.url}` : ''
   const cardStyle = bgUrl ? {
-    backgroundImage: `url(${bgUrl})`,
+    backgroundImage: `linear-gradient(rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0.75)), url(${bgUrl})`,
     backgroundSize: 'cover',
     backgroundPosition: 'center',
-    color: bg.key === 'bg_clouds' || bg.key === 'bg_snow' ? '#1e293b' : '#ffffff',
-    textShadow: bg.key === 'bg_clouds' || bg.key === 'bg_snow' ? 'none' : '0 1px 3px rgba(0,0,0,0.5)',
+    color: '#1e293b',
+    textShadow: 'none',
   } : {}
 
   const handleComment = async () => {
@@ -191,11 +191,11 @@ export default function UpdatesView() {
           const bg = BACKGROUNDS.find(b => b.key === post.background) || BACKGROUNDS[0]
           const bgUrl = bg.url ? `/app/backgrounds/${bg.url}` : ''
           const cardStyle = bgUrl ? {
-            backgroundImage: `url(${bgUrl})`,
+            backgroundImage: `linear-gradient(rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0.75)), url(${bgUrl})`,
             backgroundSize: 'cover',
             backgroundPosition: 'center',
-            color: bg.key === 'bg_clouds' || bg.key === 'bg_snow' ? '#1e293b' : '#ffffff',
-            textShadow: bg.key === 'bg_clouds' || bg.key === 'bg_snow' ? 'none' : '0 1px 3px rgba(0,0,0,0.5)',
+            color: '#1e293b',
+            textShadow: 'none',
           } : {}
 
           return (
@@ -208,7 +208,7 @@ export default function UpdatesView() {
                 <div className="flex items-start gap-3">
                   <div className="flex-shrink-0 mt-1">
                     {seen
-                      ? <div className={`w-2 h-2 rounded-full ${bgUrl ? bg.key === 'bg_clouds' || bg.key === 'bg_snow' ? 'bg-slate-700/20' : 'bg-white/20' : 'bg-raised'}`} />
+                      ? <div className={`w-2 h-2 rounded-full ${bgUrl ? 'bg-slate-700/20' : 'bg-raised'}`} />
                       : <div className="w-2 h-2 rounded-full bg-accent animate-pulse" />}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -231,19 +231,19 @@ export default function UpdatesView() {
               </button>
 
               {/* Like + comment bar */}
-              <div className={`flex border-t ${bgUrl ? 'border-white/10' : 'border-app'}`}>
+              <div className={`flex border-t ${bgUrl ? 'border-slate-800/10' : 'border-app'}`}>
                 <button
                   onClick={() => toggleBuzzLike(post.id, uid, userName)}
                   className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold cursor-pointer bg-transparent border-none transition-colors
-                    ${liked ? 'text-pink-400' : bgUrl ? bg.key === 'bg_clouds' || bg.key === 'bg_snow' ? 'text-slate-600 hover:text-pink-500' : 'text-white/80 hover:text-pink-400' : 'text-muted hover:text-pink-400'}`}>
+                    ${liked ? 'text-pink-400' : bgUrl ? 'text-slate-600 hover:text-pink-500' : 'text-muted hover:text-pink-400'}`}>
                   <span>{liked ? '❤️' : '🤍'}</span>
                   <span>{likeCount > 0 ? likeCount : 'Like'}</span>
                 </button>
-                <div className={`w-px ${bgUrl ? 'bg-white/10' : 'bg-app'}`} />
+                <div className={`w-px ${bgUrl ? 'bg-slate-800/10' : 'bg-app'}`} />
                 <button
                   onClick={() => { setOpenPost(post) }}
                   className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold cursor-pointer bg-transparent border-none transition-colors
-                    ${bgUrl ? bg.key === 'bg_clouds' || bg.key === 'bg_snow' ? 'text-slate-600 hover:text-primary' : 'text-white/80 hover:text-primary' : 'text-muted hover:text-primary'}`}>
+                    ${bgUrl ? 'text-slate-600 hover:text-primary' : 'text-muted hover:text-primary'}`}>
                   <span>💬</span>
                   <span>{cmtCount > 0 ? cmtCount : 'Comment'}</span>
                 </button>
