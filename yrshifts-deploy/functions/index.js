@@ -150,6 +150,37 @@ function generateTeacherICalFeed(shifts) {
   ].join('\r\n')
 }
 
+// ── Shared SMTP & Twilio clients (reused across calls to prevent connection overhead and throttling) ──
+let cachedSMTPTransport = null
+function getSMTPTransport() {
+  if (cachedSMTPTransport) return cachedSMTPTransport
+  if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+    cachedSMTPTransport = require('nodemailer').createTransport({
+      host:   'smtp.gmail.com',
+      port:   465,
+      secure: true,
+      auth:   {
+        user: process.env.SMTP_USER.trim(),
+        pass: process.env.SMTP_PASS.replace(/\s/g,''),
+      },
+      tls:    { rejectUnauthorized: false },
+      pool:   true,             // Enable SMTP connection pooling
+      maxConnections: 5,        // Limit max concurrent connections
+      maxMessages: 100,         // Limit messages sent per connection before cycling
+    })
+  }
+  return cachedSMTPTransport
+}
+
+let cachedTwilioClient = null
+function getTwilioClient() {
+  if (cachedTwilioClient) return cachedTwilioClient
+  if (process.env.TWILIO_SID && process.env.TWILIO_TOKEN) {
+    cachedTwilioClient = require('twilio')(process.env.TWILIO_SID, process.env.TWILIO_TOKEN)
+  }
+  return cachedTwilioClient
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SHARED DELIVERY — FCM push + email + SMS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -186,15 +217,9 @@ async function deliver(user, subject, body, icsContent, customLink) {
   }
 
   // Email
-  if (process.env.SMTP_USER && process.env.SMTP_PASS && user.email) {
+  const transport = getSMTPTransport()
+  if (transport && user.email) {
     try {
-      const transport = require('nodemailer').createTransport({
-        host:   'smtp.gmail.com',
-        port:   465,
-        secure: true,
-        auth:   { user: process.env.SMTP_USER.trim(), pass: process.env.SMTP_PASS.replace(/\s/g,'') },
-        tls:    { rejectUnauthorized: false },
-      })
       const mailOptions = {
         from:    `"ShiftHub" <${process.env.SMTP_USER}>`,
         to:      user.email,
@@ -215,12 +240,12 @@ async function deliver(user, subject, body, icsContent, customLink) {
   }
 
   // SMS (Twilio)
+  const twilio = getTwilioClient()
   const phone = (user.phone || '').replace(/\D/g, '')
-  if (process.env.TWILIO_SID && process.env.TWILIO_TOKEN && process.env.TWILIO_FROM && phone.length >= 10) {
+  if (twilio && process.env.TWILIO_FROM && phone.length >= 10) {
     try {
       const e164 = phone.length === 10 ? `+1${phone}` : `+${phone}`
-      await require('twilio')(process.env.TWILIO_SID, process.env.TWILIO_TOKEN)
-        .messages.create({ body, from: process.env.TWILIO_FROM, to: e164 })
+      await twilio.messages.create({ body, from: process.env.TWILIO_FROM, to: e164 })
       results.sms = true
     } catch (e) { console.error('SMS:', e.message) }
   }
@@ -597,20 +622,27 @@ exports.onEventCreated = onDocumentCreated({ document: 'events/{eventId}', secre
 // ─────────────────────────────────────────────────────────────────────────────
 // 6. NEW WEEKLY BUZZ POST — notify ALL teachers
 // ─────────────────────────────────────────────────────────────────────────────
-exports.onBuzzPostCreated = onDocumentCreated({ document: 'weekly_buzz/{postId}', secrets: EMAIL_SECRETS }, async (event) => {
-  const post = event.data?.data()
-  if (!post) return
+exports.onBuzzPostWritten = onDocumentWritten({ document: 'weekly_buzz/{postId}', secrets: EMAIL_SECRETS }, async (event) => {
+  const before = event.data.before?.data()
+  const after  = event.data.after?.data()
+  if (!after) return // Deleted
+
+  // Notify only when first published (not a draft) or transitioning from draft to published
+  const isNewPublish = !before && !after.draft
+  const isTransitionPublish = before && before.draft && !after.draft
+
+  if (!isNewPublish && !isTransitionPublish) return
 
   const teachers = await getAllTeachers()
   // Strip HTML tags for email plain-text preview safely (preserving block borders as spaces)
-  const preview = (post.content || '')
+  const preview = (after.content || '')
     .replace(/<\/p>|<\/div>|<\/h[1-6]>|<\/li>|<br\s*\/?>/gi, ' ')
     .replace(/<[^>]*>/g, '')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 200)
-  const subject  = `📢 New post — ${post.title}`
-  const body     = `Hi,\n\n${post.authorName || 'Admin'} posted a new update:\n\n"${post.title}"\n\n${preview}${preview.length === 200 ? '…' : ''}\n\nOpen ShiftHub to read the full post.\n\nhttps://yrshifts.web.app/app`
+  const subject  = `📢 New post — ${after.title}`
+  const body     = `Hi,\n\n${after.authorName || 'Admin'} posted a new update:\n\n"${after.title}"\n\n${preview}${preview.length === 200 ? '…' : ''}\n\nOpen ShiftHub to read the full post.\n\nhttps://yrshifts.web.app/app`
 
   await Promise.all(teachers.map(teacher => deliver(teacher, subject, body)))
   console.log(`Buzz notification sent to ${teachers.length} teachers`)
