@@ -148,6 +148,7 @@ const useScheduleStore = create((set, get) => ({
     }
 
     if ((scope === 'all' || scope === 'future') && ctxShift) {
+      batch.set(doc(db, 'shifts', updatedShift.id), { ...updatedShift, date: ctxDateKey || updatedShift.date })
       const related = await get().getRelatedShifts(ctxShift)
       related.forEach(ds => {
         const s = ds.data()
@@ -262,14 +263,26 @@ const useScheduleStore = create((set, get) => ({
   // ── Chip actions ───────────────────────────────────────────────────
   async duplicateShift(shift) {
     const newId = uid()
-    await setDoc(doc(db, 'shifts', newId), { ...shift, id: newId, seriesId: uid() })
+    await setDoc(doc(db, 'shifts', newId), { 
+      ...shift, 
+      id: newId, 
+      seriesId: uid(),
+      status: 'draft',
+      confirmationStatus: null
+    })
   },
 
   async multiDupShift(shift, count) {
     const batch = writeBatch(db)
     for (let i = 0; i < count; i++) {
       const newId = uid()
-      batch.set(doc(db, 'shifts', newId), { ...shift, id: newId, seriesId: uid() })
+      batch.set(doc(db, 'shifts', newId), { 
+        ...shift, 
+        id: newId, 
+        seriesId: uid(),
+        status: 'draft',
+        confirmationStatus: null
+      })
     }
     await batch.commit()
   },
