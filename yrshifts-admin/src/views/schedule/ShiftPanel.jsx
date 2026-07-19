@@ -840,7 +840,7 @@ export default function ShiftPanel({ shift, dateKey, isNew, onClose, onSaved, sm
               </Button>
             )}
             <Button variant="publish" onClick={handlePublish} disabled={isUploading}>
-              🔔 Publish{effectiveDates.length > 1 ? ` (${effectiveDates.length})` : ''}
+              🔔 Publish{isNew && effectiveDates.length > 1 ? ` (${effectiveDates.length})` : ''}
             </Button>
             <Button onClick={handleDraft} disabled={isUploading}>Draft</Button>
             <Button variant="danger" onClick={() => setConfirmDel(true)}>🗑</Button>
