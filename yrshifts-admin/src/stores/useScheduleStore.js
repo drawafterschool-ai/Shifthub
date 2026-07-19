@@ -176,15 +176,19 @@ const useScheduleStore = create((set, get) => ({
         }
       })
     } else {
-      const allDates = Array.isArray(dates) ? dates : [ctxDateKey || updatedShift.date]
-      allDates.forEach((dateKey, idx) => {
-        if (idx === 0 && !isNew) {
-          batch.set(doc(db, 'shifts', updatedShift.id), { ...updatedShift, date: dateKey })
-        } else {
-          const newId = uid()
-          batch.set(doc(db, 'shifts', newId), { ...updatedShift, id: newId, date: dateKey })
-        }
-      })
+      if (!isNew && ctxShift) {
+        batch.set(doc(db, 'shifts', updatedShift.id), { ...updatedShift, date: ctxDateKey || updatedShift.date })
+      } else {
+        const allDates = Array.isArray(dates) ? dates : [ctxDateKey || updatedShift.date]
+        allDates.forEach((dateKey, idx) => {
+          if (idx === 0 && !isNew) {
+            batch.set(doc(db, 'shifts', updatedShift.id), { ...updatedShift, date: dateKey })
+          } else {
+            const newId = uid()
+            batch.set(doc(db, 'shifts', newId), { ...updatedShift, id: newId, date: dateKey })
+          }
+        })
+      }
     }
 
     await batch.commit()
