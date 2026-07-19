@@ -169,6 +169,7 @@ export default function ShiftPanel({ shift, dateKey, isNew, onClose, onSaved, sm
   const [suggestions,  setSuggestions]  = useState([])
   const [showSug,      setShowSug]      = useState(false)
   const [isUploading,  setIsUploading]  = useState(false)
+  const [isSaving,     setIsSaving]     = useState(false)
   const [editScopeFor, setEditScopeFor] = useState(null)   // null | 'publish' | 'draft'
   const [confirmDel,   setConfirmDel]   = useState(false)
   const [err,          setErr]          = useState('')
@@ -468,6 +469,7 @@ export default function ShiftPanel({ shift, dateKey, isNew, onClose, onSaved, sm
 
   const doSave = async (action, scope) => {
     setEditScopeFor(null)
+    setIsSaving(true)
     try {
       await saveShift(
         build(action === 'publish' ? 'published' : 'draft'),
@@ -476,24 +478,38 @@ export default function ShiftPanel({ shift, dateKey, isNew, onClose, onSaved, sm
         instructors, sms,
       )
       onSaved(action === 'publish' ? '✅ Published' : '📝 Draft saved')
-    } catch (e) { console.error(e); setErr('Error saving shift.') }
+    } catch (e) {
+      console.error(e)
+      setErr('Error saving shift.')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const handleConfirmShift = async () => {
     setErr('')
+    setIsSaving(true)
     try {
       await confirmShift(shift.id)
       onSaved('✅ Shift confirmed')
     } catch (e) {
-      console.error(e); setErr('Error confirming shift.')
+      console.error(e)
+      setErr('Error confirming shift.')
+    } finally {
+      setIsSaving(false)
     }
   }
 
   const handleConfirmDelete = async (scope) => {
+    setIsSaving(true)
     try {
       const count = await deleteShift(shift, scope, dateKey)
       onSaved(`🗑 Deleted ${count} shift${count !== 1 ? 's' : ''}`)
-    } catch (e) { console.error(e) }
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const mLabel   = new Date(calMonth.year, calMonth.month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
@@ -835,16 +851,18 @@ export default function ShiftPanel({ shift, dateKey, isNew, onClose, onSaved, sm
           {/* Footer */}
           <div className="px-6 py-3.5 border-t border-app flex items-center gap-2 flex-shrink-0">
             {!isNew && shift.instructorId && shift.confirmationStatus !== 'confirmed' && (
-              <Button variant="primary" onClick={handleConfirmShift} disabled={isUploading} icon="✔️">
-                Confirm Shift
+              <Button variant="primary" onClick={handleConfirmShift} disabled={isUploading || isSaving} icon="✔️">
+                {isSaving ? 'Confirming…' : 'Confirm Shift'}
               </Button>
             )}
-            <Button variant="publish" onClick={handlePublish} disabled={isUploading}>
-              🔔 Publish{isNew && effectiveDates.length > 1 ? ` (${effectiveDates.length})` : ''}
+            <Button variant="publish" onClick={handlePublish} disabled={isUploading || isSaving}>
+              {isSaving ? 'Publishing…' : `🔔 Publish${isNew && effectiveDates.length > 1 ? ` (${effectiveDates.length})` : ''}`}
             </Button>
-            <Button onClick={handleDraft} disabled={isUploading}>Draft</Button>
-            <Button variant="danger" onClick={() => setConfirmDel(true)}>🗑</Button>
-            <Button onClick={() => setShowSaveTemplateModal(true)} disabled={isUploading}>⏱ Save Template</Button>
+            <Button onClick={handleDraft} disabled={isUploading || isSaving}>
+              {isSaving ? 'Saving…' : 'Draft'}
+            </Button>
+            <Button variant="danger" onClick={() => setConfirmDel(true)} disabled={isUploading || isSaving}>🗑</Button>
+            <Button onClick={() => setShowSaveTemplateModal(true)} disabled={isUploading || isSaving}>⏱ Save Template</Button>
           </div>
         </div>
       </div>
