@@ -855,8 +855,8 @@ export default function ShiftPanel({ shift, dateKey, isNew, onClose, onSaved, sm
                 {isSaving ? 'Confirming…' : 'Confirm Shift'}
               </Button>
             )}
-            <Button variant="publish" onClick={handlePublish} disabled={isUploading || isSaving}>
-              {isSaving ? 'Publishing…' : `🔔 Publish${isNew && effectiveDates.length > 1 ? ` (${effectiveDates.length})` : ''}`}
+            <Button variant={(!isNew && shift.status === 'published') ? 'primary' : 'publish'} onClick={handlePublish} disabled={isUploading || isSaving}>
+              {isSaving ? ((!isNew && shift.status === 'published') ? 'Saving…' : 'Publishing…') : ((!isNew && shift.status === 'published') ? '💾 Save' : `🔔 Publish${isNew && effectiveDates.length > 1 ? ` (${effectiveDates.length})` : ''}`)}
             </Button>
             <Button onClick={handleDraft} disabled={isUploading || isSaving}>
               {isSaving ? 'Saving…' : 'Draft'}
