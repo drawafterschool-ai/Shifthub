@@ -149,29 +149,39 @@ const useScheduleStore = create((set, get) => ({
 
     if ((scope === 'all' || scope === 'future') && ctxShift) {
       batch.set(doc(db, 'shifts', updatedShift.id), { ...updatedShift, date: ctxDateKey || updatedShift.date })
+      const activeInstructorChanged = ctxShift && (updatedShift.instructorId !== ctxShift.instructorId)
       const related = await get().getRelatedShifts(ctxShift)
       related.forEach(ds => {
         const s = ds.data()
         const inScope = scope === 'all' || (scope === 'future' && s.date >= ctxDateKey)
         if (inScope) {
+          let sInstructorId = s.instructorId
           let sConfirmationStatus = s.confirmationStatus
-          if (action === 'publish') {
+
+          if (activeInstructorChanged) {
+            sInstructorId = updatedShift.instructorId
             if (updatedShift.claimable) {
+              sInstructorId = null
               sConfirmationStatus = null
-            } else if (updatedShift.instructorId) {
-              const sWasConfirmed = s.confirmationStatus === 'confirmed'
-              const instructorChanged = s.instructorId !== updatedShift.instructorId
-              if (sWasConfirmed && !dayOrTimeChanged && !instructorChanged) {
-                sConfirmationStatus = 'confirmed'
-              } else {
+            } else if (sInstructorId) {
+              sConfirmationStatus = 'pending'
+            }
+          } else {
+            if (updatedShift.claimable) {
+              sInstructorId = null
+              sConfirmationStatus = null
+            } else if (sInstructorId) {
+              if (dayOrTimeChanged) {
                 sConfirmationStatus = 'pending'
               }
             }
           }
+
           batch.update(ds.ref, { 
             ...updatedShift, 
             id: s.id, 
             date: s.date,
+            instructorId: sInstructorId,
             confirmationStatus: sConfirmationStatus
           })
         }
