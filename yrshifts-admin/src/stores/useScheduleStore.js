@@ -150,30 +150,37 @@ const useScheduleStore = create((set, get) => ({
     if ((scope === 'all' || scope === 'future') && ctxShift) {
       batch.set(doc(db, 'shifts', updatedShift.id), { ...updatedShift, date: ctxDateKey || updatedShift.date })
       const activeInstructorChanged = ctxShift && (updatedShift.instructorId !== ctxShift.instructorId)
+      const activeClaimableChanged = ctxShift && (updatedShift.claimable !== ctxShift.claimable)
       const related = await get().getRelatedShifts(ctxShift)
       related.forEach(ds => {
         const s = ds.data()
         const inScope = scope === 'all' || (scope === 'future' && s.date >= ctxDateKey)
         if (inScope) {
           let sInstructorId = s.instructorId
+          let sClaimable = s.claimable
           let sConfirmationStatus = s.confirmationStatus
 
-          if (activeInstructorChanged) {
-            sInstructorId = updatedShift.instructorId
-            if (updatedShift.claimable) {
-              sInstructorId = null
-              sConfirmationStatus = null
-            } else if (sInstructorId) {
-              sConfirmationStatus = 'pending'
-            }
-          } else {
-            if (updatedShift.claimable) {
-              sInstructorId = null
-              sConfirmationStatus = null
-            } else if (sInstructorId) {
-              if (dayOrTimeChanged) {
+          const sharesOriginalInstructor = ctxShift && (s.instructorId === ctxShift.instructorId)
+
+          if (sharesOriginalInstructor) {
+            if (activeInstructorChanged || activeClaimableChanged) {
+              sInstructorId = updatedShift.instructorId
+              sClaimable = updatedShift.claimable
+              if (sClaimable) {
+                sInstructorId = null
+                sConfirmationStatus = null
+              } else if (sInstructorId) {
                 sConfirmationStatus = 'pending'
               }
+            } else {
+              if (sInstructorId && dayOrTimeChanged) {
+                sConfirmationStatus = 'pending'
+              }
+            }
+          } else {
+            // Keep sibling's original instructor and claimable status (different assignment state)
+            if (sInstructorId && dayOrTimeChanged) {
+              sConfirmationStatus = 'pending'
             }
           }
 
@@ -182,6 +189,7 @@ const useScheduleStore = create((set, get) => ({
             id: s.id, 
             date: s.date,
             instructorId: sInstructorId,
+            claimable: sClaimable,
             confirmationStatus: sConfirmationStatus
           })
         }
