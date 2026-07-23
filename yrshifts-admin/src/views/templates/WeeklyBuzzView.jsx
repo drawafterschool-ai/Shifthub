@@ -13,6 +13,8 @@ import Modal, { ModalHeader, ModalFooter } from '../../components/Modal'
 // ── Background choices configuration ──────────────────────────────────────────
 const BACKGROUNDS = [
   { key: 'default',    name: 'Default',      url: '',                 textCls: 'text-muted',        titleCls: 'text-primary',                  subCls: 'text-dim' },
+  { key: 'bg_chick',   name: 'Chick',         url: 'bg_chick.png',      textCls: 'text-slate-800/95', titleCls: 'text-slate-900 font-extrabold', subCls: 'text-slate-600', noWash: true },
+  { key: 'bg_weather', name: 'Weather',       url: 'bg_weather.png',    textCls: 'text-slate-800/95', titleCls: 'text-slate-900 font-extrabold', subCls: 'text-slate-600', noWash: true },
   { key: 'bg_bell',    name: 'Notification',  url: 'bg_bell.png',       textCls: 'text-slate-800/95', titleCls: 'text-slate-900 font-extrabold', subCls: 'text-slate-600' },
   { key: 'bg_clouds',  name: 'Clouds',        url: 'bg_clouds.png',     textCls: 'text-slate-800/95', titleCls: 'text-slate-900 font-extrabold', subCls: 'text-slate-600' },
   { key: 'bg_trees',   name: 'Trees',         url: 'bg_trees.png',      textCls: 'text-slate-800/95', titleCls: 'text-slate-900 font-extrabold', subCls: 'text-slate-600' },
@@ -113,7 +115,9 @@ function RichEditor({ value, onChange, background }) {
   const bg = BACKGROUNDS.find(b => b.key === background) || BACKGROUNDS[0]
   const bgUrl = bg.url ? `/admin/backgrounds/${bg.url}` : ''
   const editorStyle = bgUrl ? {
-    backgroundImage: `linear-gradient(rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.5)), url(${bgUrl})`,
+    backgroundImage: bg.noWash
+      ? `url(${bgUrl})`
+      : `linear-gradient(rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.5)), url(${bgUrl})`,
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     color: '#1e293b',
@@ -258,7 +262,9 @@ function PostCard({ post, instructors, onEdit, onDelete, onRemind }) {
   const bg = BACKGROUNDS.find(b => b.key === post.background) || BACKGROUNDS[0]
   const bgUrl = bg.url ? `/admin/backgrounds/${bg.url}` : ''
   const cardStyle = bgUrl ? {
-    backgroundImage: `linear-gradient(rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.5)), url(${bgUrl})`,
+    backgroundImage: bg.noWash
+      ? `url(${bgUrl})`
+      : `linear-gradient(rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.5)), url(${bgUrl})`,
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     color: '#1e293b',
