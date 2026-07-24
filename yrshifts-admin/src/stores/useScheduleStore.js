@@ -18,6 +18,7 @@ const useScheduleStore = create((set, get) => ({
   _unsubs:        [],
 
   init() {
+    if (get()._unsubs && get()._unsubs.length > 0) return
     // Load from cache if exists
     try {
       const cachedShifts = localStorage.getItem('shifthub_rawShifts')
@@ -85,17 +86,34 @@ const useScheduleStore = create((set, get) => ({
 
   // ── Series lookup ──────────────────────────────────────────────────
   async getRelatedShifts(ref) {
+    const rawShifts = get().rawShifts || []
     if (ref.seriesId) {
-      const snap = await getDocs(query(collection(db, 'shifts'), where('seriesId', '==', ref.seriesId)))
-      if (snap.docs.length > 1) return snap.docs
+      const siblings = rawShifts.filter(s => s.seriesId === ref.seriesId)
+      if (siblings.length > 0) {
+        return siblings.map(s => ({
+          id: s.id,
+          ref: doc(db, 'shifts', s.id),
+          data: () => s
+        }))
+      }
     }
     if (ref.title && ref.start) {
-      const snap = await getDocs(query(
-        collection(db, 'shifts'),
-        where('title', '==', ref.title),
-        where('start', '==', ref.start),
-      ))
-      if (snap.docs.length > 0) return snap.docs
+      const matching = rawShifts.filter(s => s.title === ref.title && s.start === ref.start)
+      if (matching.length > 0) {
+        return matching.map(s => ({
+          id: s.id,
+          ref: doc(db, 'shifts', s.id),
+          data: () => s
+        }))
+      }
+    }
+    const single = rawShifts.filter(s => s.id === ref.id)
+    if (single.length > 0) {
+      return single.map(s => ({
+        id: s.id,
+        ref: doc(db, 'shifts', s.id),
+        data: () => s
+      }))
     }
     const snap = await getDocs(query(collection(db, 'shifts'), where('id', '==', ref.id)))
     return snap.docs
@@ -239,7 +257,7 @@ const useScheduleStore = create((set, get) => ({
             }
 
             sms.send([{ to: `${inst.firstName} ${inst.lastName}`, text: smsText }])
-            await createNotification({
+            createNotification({
               type: 'shift_assigned', recipientId: String(inst.id),
               recipientName: inst.firstName, actorName: 'Admin',
               shiftId: updatedShift.id, shiftDate: updatedShift.date,
@@ -248,7 +266,7 @@ const useScheduleStore = create((set, get) => ({
               forAdmin: false,
               message: notifMessageText,
               subject: subjectText,
-            })
+            }).catch(e => console.warn('Non-fatal notification error:', e))
           }
         }
       } catch (notifErr) {

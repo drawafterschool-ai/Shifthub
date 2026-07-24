@@ -11,6 +11,7 @@ const useFormsStore = create((set, get) => ({
   _unsubAssignments: null,
 
   init() {
+    if (get()._unsubForms || get()._unsubAssignments) return
     // 1. Try to load cached data for forms and assignments
     try {
       const cachedForms = localStorage.getItem('shifthub_forms_templates')

@@ -17,6 +17,7 @@ const useChatStore = create((set, get) => ({
   _unsubs:      [],
 
   init() {
+    if (get()._unsubs && get()._unsubs.length > 0) return
     const unsubChats = onSnapshot(collection(db, 'chats'), (snap) => {
       const chats = snap.docs
         .map(d => ({ id: d.id, ...d.data() }))

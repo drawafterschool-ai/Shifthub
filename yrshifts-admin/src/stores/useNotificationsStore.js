@@ -11,6 +11,7 @@ const useNotificationsStore = create((set, get) => ({
   _unsub:        null,
 
   init() {
+    if (get()._unsub) return
     // Clean up any existing subscription first to avoid leaks
     get().cleanup()
 

@@ -18,6 +18,7 @@ const useSettingsStore = create((set, get) => ({
   _unsub:       null,
 
   init() {
+    if (get()._unsub) return
     try {
       const cached = localStorage.getItem('shifthub_settings')
       if (cached) {
