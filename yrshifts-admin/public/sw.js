@@ -40,7 +40,7 @@ self.addEventListener('notificationclick', event => {
   )
 })
 
-const CACHE = 'shifthub-admin-v6'
+const CACHE = 'shifthub-admin-v7'
 
 // Pre-cache the shell on install
 self.addEventListener('install', e => {

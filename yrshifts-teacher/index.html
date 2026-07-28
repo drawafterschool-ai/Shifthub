@@ -24,9 +24,41 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <style>
+      html, body {
+        background-color: #0F1117 !important;
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+    </style>
   </head>
-  <body>
-    <div id="root"></div>
+  <body style="background-color: #0F1117;">
+    <div id="root">
+      <div style="width: 100vw; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background-color: #0F1117; color: #ffffff; text-align: center; position: relative; overflow: hidden;">
+        <div style="position: absolute; top: -96px; left: -96px; width: 320px; height: 320px; background-color: rgba(99, 102, 241, 0.2); border-radius: 9999px; filter: blur(48px);"></div>
+        <div style="position: absolute; bottom: -96px; right: -96px; width: 320px; height: 320px; background-color: rgba(20, 184, 166, 0.2); border-radius: 9999px; filter: blur(48px);"></div>
+
+        <div style="position: relative; z-index: 10; display: flex; flex-direction: column; align-items: center; padding: 0 32px;">
+          <div style="position: relative; margin-bottom: 24px;">
+            <div style="position: absolute; inset: 0; background-color: rgba(99, 102, 241, 0.25); border-radius: 24px; filter: blur(16px);"></div>
+            <div style="position: relative; width: 96px; height: 96px; border-radius: 24px; background-color: rgba(30, 27, 75, 0.4); border: 1px solid rgba(99, 102, 241, 0.3); backdrop-filter: blur(12px); display: flex; align-items: center; justify-content: center; padding: 10px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); overflow: hidden;">
+              <img src="/app/yr_logo.jpg" alt="YR Logo" style="width: 100%; height: 100%; object-fit: cover; border-radius: 16px;" />
+            </div>
+          </div>
+
+          <h1 style="font-size: 30px; font-weight: 800; letter-spacing: -0.025em; color: #ffffff; margin: 0 0 4px 0;">ShiftHub</h1>
+          <p style="font-size: 12px; font-weight: 500; color: #9CA3AF; text-transform: uppercase; letter-spacing: 0.1em; margin: 0 0 40px 0;">Young Rembrandts - Minnesota &amp; Western Wisconsin</p>
+        </div>
+
+        <div style="position: absolute; bottom: 24px; font-size: 10px; color: #6B7280; font-family: monospace; letter-spacing: 0.05em;">
+          v2.0 • ShiftHub Suite - Giordano Fontana
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
     <script>
       // Register PWA service worker (separate from Firebase messaging SW)
