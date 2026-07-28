@@ -53,9 +53,36 @@ const needsHomeScreen = isIOS && !isStandalone
 
 function LoadingScreen() {
   return (
-    <div className="w-screen h-screen flex flex-col items-center justify-center bg-app gap-3">
-      <div className="w-10 h-10 rounded-2xl bg-accent flex items-center justify-center text-xl">📅</div>
-      <div className="w-6 h-6 rounded-full border-2 border-accent border-t-transparent animate-spin" />
+    <div className="w-screen h-screen flex flex-col items-center justify-center bg-[#0F1117] text-white p-4 relative overflow-hidden">
+      <div className="absolute -top-24 -left-24 w-80 h-80 bg-indigo-600/20 rounded-full blur-3xl" />
+      <div className="absolute -bottom-24 -right-24 w-80 h-80 bg-teal-500/20 rounded-full blur-3xl" />
+
+      <div className="relative z-10 flex flex-col items-center text-center px-8">
+        <div className="relative mb-6 group">
+          <div className="absolute inset-0 bg-indigo-500/25 rounded-3xl blur-xl" />
+          <div className="relative w-24 h-24 rounded-3xl bg-indigo-950/40 border border-indigo-500/30 backdrop-blur-md flex items-center justify-center p-2.5 shadow-2xl overflow-hidden">
+            <img src="/app/yr_logo.jpg" alt="YR Logo" className="w-full h-full object-cover rounded-2xl shadow-md" />
+          </div>
+        </div>
+
+        <h1 className="text-3xl font-extrabold font-display tracking-tight text-white mb-1">
+          ShiftHub
+        </h1>
+        <p className="text-xs font-medium text-gray-400 uppercase tracking-widest mb-10">
+          Young Rembrandts - Minnesota &amp; Western Wisconsin
+        </p>
+
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 rounded-full border-2 border-indigo-500/20 border-t-indigo-400 animate-spin" />
+          <p className="text-xs font-semibold text-gray-400 tracking-wide">
+            Loading your schedule…
+          </p>
+        </div>
+      </div>
+
+      <div className="absolute bottom-6 text-[10px] text-gray-500 font-mono tracking-wider">
+        v2.0 • ShiftHub Suite - Giordano Fontana
+      </div>
     </div>
   )
 }
