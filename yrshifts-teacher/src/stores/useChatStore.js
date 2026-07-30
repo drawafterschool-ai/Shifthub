@@ -9,24 +9,87 @@ import useAuthStore from './useAuthStore'
 
 const sessionStart = Date.now()
 
+const activeMsgUnsubs = new Map() // chatId -> unsubFn
+let rootChatUnsub = null
+
+function getMsgTime(m) {
+  if (!m || !m.createdAt) return Date.now()
+  if (typeof m.createdAt.toMillis === 'function') return m.createdAt.toMillis()
+  if (typeof m.createdAt.seconds === 'number') return m.createdAt.seconds * 1000
+  if (typeof m.createdAt === 'number') return m.createdAt
+  if (typeof m.createdAt === 'string') return new Date(m.createdAt).getTime()
+  return Date.now()
+}
+
+function syncMessageListener(chatId, set, get) {
+  if (!chatId || activeMsgUnsubs.has(chatId)) return
+  activeMsgUnsubs.set(chatId, () => {}) // Placeholder to prevent duplicate sync calls
+
+  const q = collection(db, 'chats', chatId, 'messages')
+  let isInitial = true
+
+  const unsub = onSnapshot(q, (msgSnap) => {
+    const list = msgSnap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => getMsgTime(a) - getMsgTime(b))
+
+    set(s => {
+      const currentList = s.messages[chatId] || []
+      const optimisticMsgs = currentList.filter(m => m._optimistic && !list.some(real => real.text === m.text && real.authorId === m.authorId))
+      return {
+        messages: {
+          ...s.messages,
+          [chatId]: [...list, ...optimisticMsgs],
+        },
+      }
+    })
+
+    if (isInitial) {
+      isInitial = false
+      return
+    }
+
+    const currentUserId = useAuthStore.getState().user?.uid
+    const hasNewIncoming = msgSnap.docChanges().some(change => {
+      if (change.type !== 'added') return false
+      const m = change.doc.data()
+      if (!m || m.authorId === currentUserId) return false
+      const createdTime = getMsgTime(m)
+      return !createdTime || createdTime > sessionStart
+    })
+
+    if (hasNewIncoming) {
+      import('../utils/sound').then(({ playNotificationSound }) => playNotificationSound()).catch(() => {})
+    }
+  }, (err) => {
+    console.error(`Error loading messages for chat ${chatId}:`, err)
+  })
+
+  activeMsgUnsubs.set(chatId, unsub)
+}
+
 const useChatStore = create((set, get) => ({
   chats:        [],
   messages:     {},
   activeChatId: null,
   loading:      true,
-  _unsubs:      [],
+  _initialized: false,
 
   init(userId) {
-    if (!userId) return
+    if (!userId || get()._initialized) return
+    set({ _initialized: true })
+
+    if (rootChatUnsub) rootChatUnsub()
+
     const chatsQuery = query(
       collection(db, 'chats'),
       where('members', 'array-contains', userId)
     )
-    const unsubChats = onSnapshot(chatsQuery, (snap) => {
+
+    rootChatUnsub = onSnapshot(chatsQuery, (snap) => {
       const chats = snap.docs
         .map(d => ({ id: d.id, ...d.data() }))
         .sort((a, b) => {
-          // Pinned chats first, then by lastAt
           const getSeconds = (val) => {
             if (!val) return 0
             if (val.seconds !== undefined) return val.seconds
@@ -42,129 +105,44 @@ const useChatStore = create((set, get) => ({
           if (aPin !== bPin) return bPin - aPin
           return getSeconds(b.lastAt) - getSeconds(a.lastAt)
         })
+
       set({ chats, loading: false })
 
-      // garbage collect deleted or removed chat listeners
-      const currentChatIds = chats.map(c => c.id)
-      const unsubsToKeep = []
-      const unsubsToRemove = []
-
-      get()._unsubs.forEach(unsub => {
-        // If it's a message listener and its chat is no longer in currentChatIds, clean it up!
-        if (unsub._chatId && unsub._chatId !== 'root-chats' && !currentChatIds.includes(unsub._chatId)) {
-          unsubsToRemove.push(unsub)
-        } else {
-          unsubsToKeep.push(unsub)
+      // Garbage collect deleted chats
+      const currentChatIds = new Set(chats.map(c => c.id))
+      for (const [cId, unsubFn] of activeMsgUnsubs.entries()) {
+        if (!currentChatIds.has(cId)) {
+          try { unsubFn() } catch {}
+          activeMsgUnsubs.delete(cId)
         }
-      })
+      }
 
-      // Unsubscribe and delete local messages
-      unsubsToRemove.forEach(unsub => {
-        try { unsub() } catch (err) { console.error('Unsub error:', err) }
-      })
-
-      set(s => {
-        const nextMessages = { ...s.messages }
-        unsubsToRemove.forEach(unsub => {
-          delete nextMessages[unsub._chatId]
-        })
-        return {
-          _unsubs: unsubsToKeep,
-          messages: nextMessages
-        }
-      })
-
-      // Establish new message listeners
+      // Establish message listeners without duplication
       chats.forEach(chat => {
-        if (get()._unsubs.some(u => u._chatId === chat.id)) return
-        const q = query(collection(db, 'chats', chat.id, 'messages'), orderBy('createdAt', 'asc'))
-        let isInitial = true
-        const unsub = onSnapshot(q, (msgSnap) => {
-          const list = msgSnap.docs.map(d => ({ id: d.id, ...d.data() }))
-          set(s => ({
-            messages: {
-              ...s.messages,
-              [chat.id]: list,
-            },
-          }))
-
-          if (isInitial) {
-            isInitial = false
-            return
-          }
-
-          const currentUserId = useAuthStore.getState().user?.uid
-          const hasNewIncoming = msgSnap.docChanges().some(change => {
-            if (change.type !== 'added') return false
-            const m = change.doc.data()
-            if (!m || m.authorId === currentUserId) return false
-            const createdTime = m.createdAt?.toMillis
-              ? m.createdAt.toMillis()
-              : (m.createdAt?.seconds ? m.createdAt.seconds * 1000 : (Number(m.createdAt) || 0))
-            return !createdTime || createdTime > sessionStart
-          })
-
-          if (hasNewIncoming) {
-            import('../utils/sound').then(({ playNotificationSound }) => playNotificationSound())
-          }
-        }, (err) => {
-          console.error(`Error loading messages for chat ${chat.id}:`, err)
-        })
-        unsub._chatId = chat.id
-        set(s => ({ _unsubs: [...s._unsubs, unsub] }))
+        syncMessageListener(chat.id, set, get)
       })
     }, (err) => {
       console.error('Error loading chats:', err)
       set({ loading: false })
     })
-    unsubChats._chatId = 'root-chats'
-    set(s => ({ _unsubs: [...s._unsubs, unsubChats] }))
   },
 
   cleanup() {
-    get()._unsubs.forEach(fn => fn())
-    set({ _unsubs: [], messages: {}, activeChatId: null })
+    if (rootChatUnsub) {
+      try { rootChatUnsub() } catch {}
+      rootChatUnsub = null
+    }
+    for (const [cId, unsubFn] of activeMsgUnsubs.entries()) {
+      try { unsubFn() } catch {}
+    }
+    activeMsgUnsubs.clear()
+    set({ _initialized: false, messages: {}, activeChatId: null, chats: [] })
   },
 
   setActiveChat(chatId) {
     set({ activeChatId: chatId })
     if (!chatId) return
-    if (get()._unsubs.some(u => u._chatId === chatId)) return
-    const q = query(collection(db, 'chats', chatId, 'messages'), orderBy('createdAt', 'asc'))
-    let isInitial = true
-    const unsub = onSnapshot(q, (snap) => {
-      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-      set(s => ({
-        messages: {
-          ...s.messages,
-          [chatId]: list,
-        },
-      }))
-
-      if (isInitial) {
-        isInitial = false
-        return
-      }
-
-      const currentUserId = useAuthStore.getState().user?.uid
-      const hasNewIncoming = snap.docChanges().some(change => {
-        if (change.type !== 'added') return false
-        const m = change.doc.data()
-        if (!m || m.authorId === currentUserId) return false
-        const createdTime = m.createdAt?.toMillis
-          ? m.createdAt.toMillis()
-          : (m.createdAt?.seconds ? m.createdAt.seconds * 1000 : (Number(m.createdAt) || 0))
-        return !createdTime || createdTime > sessionStart
-      })
-
-      if (hasNewIncoming) {
-        import('../utils/sound').then(({ playNotificationSound }) => playNotificationSound())
-      }
-    }, (err) => {
-      console.error(`Error loading messages for active chat ${chatId}:`, err)
-    })
-    unsub._chatId = chatId
-    set(s => ({ _unsubs: [...s._unsubs, unsub] }))
+    syncMessageListener(chatId, set, get)
   },
 
   async markChatRead(chatId, userId) {
@@ -175,44 +153,81 @@ const useChatStore = create((set, get) => ({
   },
 
   async sendMessage(chatId, payload) {
-    await addDoc(collection(db, 'chats', chatId, 'messages'), {
-      text:        payload.text || '',
+    const optId = `opt-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    const optMsg = {
+      id: optId,
+      text: payload.text || '',
       attachments: payload.attachments || [],
-      replyTo:     payload.replyTo || null,
-      authorId:    payload.authorId,
-      authorName:  payload.authorName,
-      reactions:   {},
-      createdAt:   serverTimestamp(),
-    })
-    await updateDoc(doc(db, 'chats', chatId), {
-      lastMessage: payload.text
-        ? (payload.text.length > 60 ? payload.text.slice(0, 60) + '…' : payload.text)
-        : '📎 Attachment',
-      lastAt: serverTimestamp(),
-    })
+      replyTo: payload.replyTo || null,
+      authorId: payload.authorId,
+      authorName: payload.authorName,
+      reactions: {},
+      createdAt: { seconds: Math.floor(Date.now() / 1000) },
+      _optimistic: true,
+    }
+
+    // 1. Instant optimistic local UI update (0ms)
+    set(s => ({
+      messages: {
+        ...s.messages,
+        [chatId]: [...(s.messages[chatId] || []), optMsg],
+      },
+    }))
+
+    try {
+      // 2. Add message to Firestore
+      await addDoc(collection(db, 'chats', chatId, 'messages'), {
+        text:        payload.text || '',
+        attachments: payload.attachments || [],
+        replyTo:     payload.replyTo || null,
+        authorId:    payload.authorId,
+        authorName:  payload.authorName,
+        reactions:   {},
+        createdAt:   serverTimestamp(),
+      })
+
+      // 3. Update chat header
+      await updateDoc(doc(db, 'chats', chatId), {
+        lastMessage: payload.text
+          ? (payload.text.length > 60 ? payload.text.slice(0, 60) + '…' : payload.text)
+          : '📎 Attachment',
+        lastAt: serverTimestamp(),
+      })
+    } catch (err) {
+      console.error('sendMessage error:', err)
+      // Rollback optimistic message on error
+      set(s => ({
+        messages: {
+          ...s.messages,
+          [chatId]: (s.messages[chatId] || []).filter(m => m.id !== optId),
+        },
+      }))
+      throw err
+    }
   },
 
-  // ── Pin / Unpin chat ────────────────────────────────────────────────────────
   async pinChat(chatId, pinned) {
     await updateDoc(doc(db, 'chats', chatId), {
       pinnedAt: pinned ? serverTimestamp() : null,
     })
   },
 
-  // ── Delete a single message ────────────────────────────────────────────────
   async deleteMessage(chatId, msgId) {
     await deleteDoc(doc(db, 'chats', chatId, 'messages', msgId))
   },
 
-  // ── Delete entire chat + all its messages ─────────────────────────────────
   async deleteChat(chatId) {
     const batch = writeBatch(db)
-    // Delete all messages first
     const msgsSnap = await getDocs(collection(db, 'chats', chatId, 'messages'))
     msgsSnap.docs.forEach(d => batch.delete(d.ref))
     batch.delete(doc(db, 'chats', chatId))
     await batch.commit()
-    // Clean up local state
+
+    if (activeMsgUnsubs.has(chatId)) {
+      try { activeMsgUnsubs.get(chatId)() } catch {}
+      activeMsgUnsubs.delete(chatId)
+    }
+
     if (get().activeChatId === chatId) set({ activeChatId: null })
     set(s => ({
       messages: Object.fromEntries(Object.entries(s.messages).filter(([k]) => k !== chatId)),
