@@ -40,7 +40,7 @@ self.addEventListener('notificationclick', event => {
   )
 })
 
-const CACHE = 'shifthub-teacher-v8'
+const CACHE = 'shifthub-teacher-v9'
 
 self.addEventListener('install', e => {
   self.skipWaiting()
