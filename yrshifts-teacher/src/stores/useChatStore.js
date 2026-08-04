@@ -9,8 +9,9 @@ import useAuthStore from './useAuthStore'
 
 const sessionStart = Date.now()
 
-const activeMsgUnsubs = new Map() // chatId -> unsubFn
+let activeChatUnsub = null
 let rootChatUnsub = null
+let visibilityHandlerAttached = false
 
 function getMsgTime(m) {
   if (!m || !m.createdAt) return Date.now()
@@ -21,21 +22,27 @@ function getMsgTime(m) {
   return Date.now()
 }
 
-function syncMessageListener(chatId, set, get) {
-  if (!chatId || activeMsgUnsubs.has(chatId)) return
-  activeMsgUnsubs.set(chatId, () => {}) // Placeholder to prevent duplicate sync calls
+function subscribeToActiveChat(chatId, set, get) {
+  if (activeChatUnsub) {
+    try { activeChatUnsub() } catch {}
+    activeChatUnsub = null
+  }
+
+  if (!chatId) return
 
   const q = collection(db, 'chats', chatId, 'messages')
   let isInitial = true
 
-  const unsub = onSnapshot(q, (msgSnap) => {
+  activeChatUnsub = onSnapshot(q, (msgSnap) => {
     const list = msgSnap.docs
       .map(d => ({ id: d.id, ...d.data() }))
       .sort((a, b) => getMsgTime(a) - getMsgTime(b))
 
     set(s => {
       const currentList = s.messages[chatId] || []
-      const optimisticMsgs = currentList.filter(m => m._optimistic && !list.some(real => real.text === m.text && real.authorId === m.authorId))
+      const optimisticMsgs = currentList.filter(
+        m => m._optimistic && !list.some(real => real.text === m.text && real.authorId === m.authorId)
+      )
       return {
         messages: {
           ...s.messages,
@@ -62,10 +69,25 @@ function syncMessageListener(chatId, set, get) {
       import('../utils/sound').then(({ playNotificationSound }) => playNotificationSound()).catch(() => {})
     }
   }, (err) => {
-    console.error(`Error loading messages for chat ${chatId}:`, err)
+    console.error(`Error loading messages for active chat ${chatId}:`, err)
   })
+}
 
-  activeMsgUnsubs.set(chatId, unsub)
+function setupVisibilityHandler(get) {
+  if (visibilityHandlerAttached || typeof window === 'undefined') return
+  visibilityHandlerAttached = true
+
+  const handleWake = () => {
+    if (document.visibilityState === 'visible') {
+      const activeId = get().activeChatId
+      if (activeId) {
+        subscribeToActiveChat(activeId, get().setStoreState || (() => {}), get)
+      }
+    }
+  }
+
+  window.addEventListener('visibilitychange', handleWake)
+  window.addEventListener('online', handleWake)
 }
 
 const useChatStore = create((set, get) => ({
@@ -76,10 +98,13 @@ const useChatStore = create((set, get) => ({
   _initialized: false,
 
   init(userId) {
+    setupVisibilityHandler(get)
     if (!userId || get()._initialized) return
     set({ _initialized: true })
 
-    if (rootChatUnsub) rootChatUnsub()
+    if (rootChatUnsub) {
+      try { rootChatUnsub() } catch {}
+    }
 
     const chatsQuery = query(
       collection(db, 'chats'),
@@ -107,22 +132,8 @@ const useChatStore = create((set, get) => ({
         })
 
       set({ chats, loading: false })
-
-      // Garbage collect deleted chats
-      const currentChatIds = new Set(chats.map(c => c.id))
-      for (const [cId, unsubFn] of activeMsgUnsubs.entries()) {
-        if (!currentChatIds.has(cId)) {
-          try { unsubFn() } catch {}
-          activeMsgUnsubs.delete(cId)
-        }
-      }
-
-      // Establish message listeners without duplication
-      chats.forEach(chat => {
-        syncMessageListener(chat.id, set, get)
-      })
     }, (err) => {
-      console.error('Error loading chats:', err)
+      console.error('Error loading chats root:', err)
       set({ loading: false })
     })
   },
@@ -132,17 +143,23 @@ const useChatStore = create((set, get) => ({
       try { rootChatUnsub() } catch {}
       rootChatUnsub = null
     }
-    for (const [cId, unsubFn] of activeMsgUnsubs.entries()) {
-      try { unsubFn() } catch {}
+    if (activeChatUnsub) {
+      try { activeChatUnsub() } catch {}
+      activeChatUnsub = null
     }
-    activeMsgUnsubs.clear()
     set({ _initialized: false, messages: {}, activeChatId: null, chats: [] })
   },
 
   setActiveChat(chatId) {
     set({ activeChatId: chatId })
-    if (!chatId) return
-    syncMessageListener(chatId, set, get)
+    if (!chatId) {
+      if (activeChatUnsub) {
+        try { activeChatUnsub() } catch {}
+        activeChatUnsub = null
+      }
+      return
+    }
+    subscribeToActiveChat(chatId, set, get)
   },
 
   async markChatRead(chatId, userId) {
@@ -175,8 +192,12 @@ const useChatStore = create((set, get) => ({
     }))
 
     try {
-      // 2. Add message to Firestore
-      await addDoc(collection(db, 'chats', chatId, 'messages'), {
+      // 2. Atomic write batch for message doc + chat header update
+      const batch = writeBatch(db)
+      const msgRef = doc(collection(db, 'chats', chatId, 'messages'))
+      const chatRef = doc(db, 'chats', chatId)
+
+      batch.set(msgRef, {
         text:        payload.text || '',
         attachments: payload.attachments || [],
         replyTo:     payload.replyTo || null,
@@ -186,16 +207,17 @@ const useChatStore = create((set, get) => ({
         createdAt:   serverTimestamp(),
       })
 
-      // 3. Update chat header
-      await updateDoc(doc(db, 'chats', chatId), {
+      batch.update(chatRef, {
         lastMessage: payload.text
           ? (payload.text.length > 60 ? payload.text.slice(0, 60) + '…' : payload.text)
           : '📎 Attachment',
         lastAt: serverTimestamp(),
       })
+
+      await batch.commit()
     } catch (err) {
       console.error('sendMessage error:', err)
-      // Rollback optimistic message on error
+      // Rollback optimistic message on failure
       set(s => ({
         messages: {
           ...s.messages,
@@ -223,12 +245,10 @@ const useChatStore = create((set, get) => ({
     batch.delete(doc(db, 'chats', chatId))
     await batch.commit()
 
-    if (activeMsgUnsubs.has(chatId)) {
-      try { activeMsgUnsubs.get(chatId)() } catch {}
-      activeMsgUnsubs.delete(chatId)
+    if (get().activeChatId === chatId) {
+      get().setActiveChat(null)
     }
 
-    if (get().activeChatId === chatId) set({ activeChatId: null })
     set(s => ({
       messages: Object.fromEntries(Object.entries(s.messages).filter(([k]) => k !== chatId)),
     }))
