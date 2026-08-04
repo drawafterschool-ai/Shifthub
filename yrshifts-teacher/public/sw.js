@@ -40,7 +40,7 @@ self.addEventListener('notificationclick', event => {
   )
 })
 
-const CACHE = 'shifthub-teacher-v11'
+const CACHE = 'shifthub-teacher-v12'
 
 self.addEventListener('install', e => {
   self.skipWaiting()
@@ -55,36 +55,40 @@ self.addEventListener('activate', e => {
   self.clients.claim()
 })
 
+// Fetch strategy:
+// 1. Navigation & JS/CSS: Network-First to ensure fresh code and instant updates
+// 2. Static media (fonts/images): Cache-First with Network fallback
 self.addEventListener('fetch', e => {
   const { request } = e
   const url = new URL(request.url)
 
+  // Skip non-GET and cross-origin requests
   if (request.method !== 'GET' || !url.origin.includes(self.location.origin)) return
 
-  if (request.mode === 'navigate') {
+  // Navigation requests (HTML) and code bundles (JS/CSS) — Network-First
+  if (request.mode === 'navigate' || url.pathname.match(/\.(js|css)$/)) {
     e.respondWith(
       fetch(request)
         .then(res => {
-          if (res.status === 200) {
+          const type = res.headers.get('content-type') || ''
+          if (res.status === 200 && (request.mode === 'navigate' || !type.includes('text/html'))) {
             const clone = res.clone()
             caches.open(CACHE).then(c => c.put(request, clone))
           }
           return res
         })
-        .catch(() => caches.match(request).then(cached => cached || caches.match('/app/')))
+        .catch(() => caches.match(request).then(cached => cached || (request.mode === 'navigate' ? caches.match('/app/') : null)))
     )
     return
   }
 
-  if (url.pathname.match(/\.(js|css|woff2?|ttf|ico|jpg|png|svg)$/)) {
+  // Static assets (fonts, icons, images) — Cache-First
+  if (url.pathname.match(/\.(woff2?|ttf|ico|jpg|jpeg|png|gif|svg|webp)$/)) {
     e.respondWith(
       caches.match(request).then(cached => {
         if (cached) return cached
         return fetch(request).then(res => {
-          // Don't cache SPA-rewrite responses: a deleted asset URL returns
-          // index.html with status 200, which would poison the cache
-          const type = res.headers.get('content-type') || ''
-          if (res.status === 200 && !type.includes('text/html')) {
+          if (res.status === 200) {
             const clone = res.clone()
             caches.open(CACHE).then(c => c.put(request, clone))
           }

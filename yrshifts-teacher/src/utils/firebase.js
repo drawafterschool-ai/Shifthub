@@ -1,9 +1,9 @@
 import { initializeApp }  from 'firebase/app'
-import { initializeFirestore } from 'firebase/firestore'
-import { getStorage }     from 'firebase/storage'
-import { getAuth }        from 'firebase/auth'
-import { getMessaging }   from 'firebase/messaging'
-import { getFunctions }   from 'firebase/functions'
+import { getFirestore }     from 'firebase/firestore'
+import { getStorage }       from 'firebase/storage'
+import { getAuth }          from 'firebase/auth'
+import { getMessaging }     from 'firebase/messaging'
+import { getFunctions }     from 'firebase/functions'
 
 const app = initializeApp({
   apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
@@ -14,11 +14,8 @@ const app = initializeApp({
   appId:             import.meta.env.VITE_FIREBASE_APP_ID,
 })
 
-export const db        = initializeFirestore(app, {
-  // Force long-polling: the streaming transport breaks behind some
-  // proxies/AV/extensions (Write/Listen channel 400s -> writes hang forever)
-  experimentalForceLongPolling: true,
-})
+// Enable standard WebSockets for instant 0ms real-time streaming
+export const db        = getFirestore(app)
 export const storage   = getStorage(app)
 export const auth      = getAuth(app)
 export const functions = getFunctions(app)

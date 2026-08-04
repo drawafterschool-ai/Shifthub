@@ -61,10 +61,13 @@
     </div>
     <script type="module" src="/src/main.jsx"></script>
     <script>
-      // Register PWA service worker (separate from Firebase messaging SW)
+      // Register service worker
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/app/sw.js', { scope: '/app/' })
+            .then(reg => {
+              try { reg.update() } catch (e) {}
+            })
             .catch(err => console.log('SW registration failed:', err))
         })
       }
