@@ -9,16 +9,40 @@ import { uid }             from '../utils/helpers'
 import { makeShift, groupShifts, UNASSIGNED } from '../utils/schedule'
 import { createNotification } from '../utils/notifications'
 
+let shiftsUnsub = null
+let settingsUnsub = null
+let visibilityHandlerAttached = false
+
+function setupVisibilityHandler(get) {
+  if (visibilityHandlerAttached || typeof window === 'undefined') return
+  visibilityHandlerAttached = true
+
+  const handleWake = () => {
+    if (document.visibilityState === 'visible') {
+      const state = get()
+      if (state._initialized) {
+        state.init(true) // Force re-sync listeners
+      }
+    }
+  }
+
+  window.addEventListener('visibilitychange', handleWake)
+  window.addEventListener('online', handleWake)
+}
+
 const useScheduleStore = create((set, get) => ({
   rawShifts:      [],
   schedule:       {},   // grouped: { [ownerId]: { [dateKey]: Shift[] } }
   jobs:           [],
   savedTemplates: [],
   loading:        true,
-  _unsubs:        [],
+  _initialized:   false,
 
-  init() {
-    if (get()._unsubs && get()._unsubs.length > 0) return
+  init(force = false) {
+    setupVisibilityHandler(get)
+    if (get()._initialized && !force) return
+    set({ _initialized: true })
+
     // Load from cache if exists
     try {
       const cachedShifts = localStorage.getItem('shifthub_rawShifts')
@@ -27,7 +51,7 @@ const useScheduleStore = create((set, get) => ({
       
       const updateObj = {}
       let hasCachedData = false
-      if (cachedShifts) {
+      if (cachedShifts && !force) {
         const shifts = JSON.parse(cachedShifts)
         updateObj.rawShifts = shifts
         updateObj.schedule = groupShifts(shifts)
@@ -49,8 +73,11 @@ const useScheduleStore = create((set, get) => ({
       console.warn('Error loading cached schedule settings:', e)
     }
 
+    if (shiftsUnsub) try { shiftsUnsub() } catch {}
+    if (settingsUnsub) try { settingsUnsub() } catch {}
+
     // Listen to shifts
-    const unsubShifts = onSnapshot(collection(db, 'shifts'), (snap) => {
+    shiftsUnsub = onSnapshot(collection(db, 'shifts'), (snap) => {
       const shifts = snap.docs.map(d => ({ id: d.id, ...d.data() }))
       set({ rawShifts: shifts, schedule: groupShifts(shifts), loading: false })
       try {
@@ -58,10 +85,12 @@ const useScheduleStore = create((set, get) => ({
       } catch (e) {
         console.warn('Error saving shifts to cache:', e)
       }
+    }, (err) => {
+      console.error('Error listening to shifts collection:', err)
     })
 
     // Listen to company settings (jobs + templates)
-    const unsubSettings = onSnapshot(doc(db, 'settings', 'company'), (snap) => {
+    settingsUnsub = onSnapshot(doc(db, 'settings', 'company'), (snap) => {
       if (snap.exists()) {
         const d = snap.data()
         const jobs = d.jobs || []
@@ -75,13 +104,12 @@ const useScheduleStore = create((set, get) => ({
         }
       }
     })
-
-    set((s) => ({ _unsubs: [...s._unsubs, unsubShifts, unsubSettings] }))
   },
 
   cleanup() {
-    get()._unsubs.forEach(fn => fn())
-    set({ _unsubs: [] })
+    if (shiftsUnsub) { try { shiftsUnsub() } catch {}; shiftsUnsub = null }
+    if (settingsUnsub) { try { settingsUnsub() } catch {}; settingsUnsub = null }
+    set({ _initialized: false, rawShifts: [], schedule: {}, loading: true })
   },
 
   // ── Series lookup ──────────────────────────────────────────────────
@@ -121,29 +149,66 @@ const useScheduleStore = create((set, get) => ({
 
   // ── Move (drag & drop) ─────────────────────────────────────────────
   async moveShift(shiftId, toOwner, toDate, notify, instructors, sms) {
+    const prevShifts = get().rawShifts
     const isUnassigned = toOwner === UNASSIGNED
-    await updateDoc(doc(db, 'shifts', shiftId), {
-      date:                toDate,
-      instructorId:        isUnassigned ? null : toOwner,
-      claimable:           false,   // drag to unassigned = draft, NOT open shift
-      confirmationStatus:  isUnassigned ? null : 'pending',
+
+    // 1. Instant optimistic update (0ms)
+    const nextShifts = prevShifts.map(s => {
+      if (s.id !== shiftId) return s
+      return {
+        ...s,
+        date: toDate,
+        instructorId: isUnassigned ? null : toOwner,
+        claimable: false,
+        confirmationStatus: isUnassigned ? null : 'pending',
+      }
     })
-    if (notify) {
-      const { _sendNotifications } = get()
-      await _sendNotifications({ toOwner, toDate, shiftId, isUnassigned, instructors, sms })
+    set({ rawShifts: nextShifts, schedule: groupShifts(nextShifts) })
+
+    try {
+      await updateDoc(doc(db, 'shifts', shiftId), {
+        date:                toDate,
+        instructorId:        isUnassigned ? null : toOwner,
+        claimable:           false,
+        confirmationStatus:  isUnassigned ? null : 'pending',
+      })
+      if (notify) {
+        Promise.resolve().then(() => {
+          get()._sendNotifications({ toOwner, toDate, shiftId, isUnassigned, instructors, sms })
+        }).catch(e => console.warn('Non-fatal notify error:', e))
+      }
+    } catch (err) {
+      console.error('moveShift error:', err)
+      // Rollback
+      set({ rawShifts: prevShifts, schedule: groupShifts(prevShifts) })
+      throw err
     }
   },
 
   // ── Confirm Shift (on behalf of teacher) ───────────────────────────
   async confirmShift(shiftId) {
-    await updateDoc(doc(db, 'shifts', shiftId), {
-      status:             'published',
-      confirmationStatus: 'confirmed',
+    const prevShifts = get().rawShifts
+    const nextShifts = prevShifts.map(s => {
+      if (s.id !== shiftId) return s
+      return { ...s, status: 'published', confirmationStatus: 'confirmed' }
     })
+    set({ rawShifts: nextShifts, schedule: groupShifts(nextShifts) })
+
+    try {
+      await updateDoc(doc(db, 'shifts', shiftId), {
+        status:             'published',
+        confirmationStatus: 'confirmed',
+      })
+    } catch (err) {
+      console.error('confirmShift error:', err)
+      set({ rawShifts: prevShifts, schedule: groupShifts(prevShifts) })
+      throw err
+    }
   },
 
   // ── Save (from ShiftPanel) ─────────────────────────────────────────
   async saveShift(updatedShift, dates, action, scope, ctxShift, ctxDateKey, isNew, instructors, sms) {
+    const prevShifts = get().rawShifts
     const batch = writeBatch(db)
 
     const wasConfirmed = ctxShift && ctxShift.confirmationStatus === 'confirmed'
@@ -165,168 +230,276 @@ const useScheduleStore = create((set, get) => ({
       }
     }
 
+    // Build optimistic nextShifts array
+    let nextShifts = [...prevShifts]
+
     if ((scope === 'all' || scope === 'future') && ctxShift) {
-      batch.set(doc(db, 'shifts', updatedShift.id), { ...updatedShift, date: ctxDateKey || updatedShift.date })
       const activeInstructorChanged = ctxShift && (updatedShift.instructorId !== ctxShift.instructorId)
       const activeClaimableChanged = ctxShift && (updatedShift.claimable !== ctxShift.claimable)
-      const related = await get().getRelatedShifts(ctxShift)
-      related.forEach(ds => {
-        const s = ds.data()
-        const inScope = scope === 'all' || (scope === 'future' && s.date >= ctxDateKey)
-        if (inScope) {
-          let sInstructorId = s.instructorId
-          let sClaimable = s.claimable
-          let sConfirmationStatus = s.confirmationStatus
 
-          const sharesOriginalInstructor = ctxShift && (s.instructorId === ctxShift.instructorId)
+      nextShifts = nextShifts.map(s => {
+        const isTarget = s.id === updatedShift.id
+        const isSeriesSibling = s.seriesId && s.seriesId === ctxShift.seriesId
+        const isMatchingSibling = s.title === ctxShift.title && s.start === ctxShift.start
+        const isSibling = isSeriesSibling || isMatchingSibling
 
-          if (sharesOriginalInstructor) {
-            if (activeInstructorChanged || activeClaimableChanged) {
-              sInstructorId = updatedShift.instructorId
-              sClaimable = updatedShift.claimable
-              if (sClaimable) {
-                sInstructorId = null
-                sConfirmationStatus = null
-              } else if (sInstructorId) {
-                sConfirmationStatus = 'pending'
+        if (isTarget) {
+          const res = { ...updatedShift, date: ctxDateKey || updatedShift.date }
+          batch.set(doc(db, 'shifts', updatedShift.id), res)
+          return res
+        }
+
+        if (isSibling) {
+          const inScope = scope === 'all' || (scope === 'future' && s.date >= ctxDateKey)
+          if (inScope) {
+            let sInstructorId = s.instructorId
+            let sClaimable = s.claimable
+            let sConfirmationStatus = s.confirmationStatus
+
+            const sharesOriginalInstructor = ctxShift && (s.instructorId === ctxShift.instructorId)
+
+            if (sharesOriginalInstructor) {
+              if (activeInstructorChanged || activeClaimableChanged) {
+                sInstructorId = updatedShift.instructorId
+                sClaimable = updatedShift.claimable
+                if (sClaimable) {
+                  sInstructorId = null
+                  sConfirmationStatus = null
+                } else if (sInstructorId) {
+                  sConfirmationStatus = 'pending'
+                }
+              } else {
+                if (sInstructorId && dayOrTimeChanged) {
+                  sConfirmationStatus = 'pending'
+                }
               }
             } else {
               if (sInstructorId && dayOrTimeChanged) {
                 sConfirmationStatus = 'pending'
               }
             }
-          } else {
-            // Keep sibling's original instructor and claimable status (different assignment state)
-            if (sInstructorId && dayOrTimeChanged) {
-              sConfirmationStatus = 'pending'
-            }
-          }
 
-          batch.update(ds.ref, { 
-            ...updatedShift, 
-            id: s.id, 
-            date: s.date,
-            instructorId: sInstructorId,
-            claimable: sClaimable,
-            confirmationStatus: sConfirmationStatus
-          })
+            const siblingUpdated = {
+              ...updatedShift,
+              id: s.id,
+              date: s.date,
+              instructorId: sInstructorId,
+              claimable: sClaimable,
+              confirmationStatus: sConfirmationStatus
+            }
+            batch.update(doc(db, 'shifts', s.id), siblingUpdated)
+            return siblingUpdated
+          }
         }
+
+        return s
       })
+
     } else {
       if (!isNew && ctxShift) {
-        batch.set(doc(db, 'shifts', updatedShift.id), { ...updatedShift, date: ctxDateKey || updatedShift.date })
+        const singleUpdated = { ...updatedShift, date: ctxDateKey || updatedShift.date }
+        batch.set(doc(db, 'shifts', updatedShift.id), singleUpdated)
+        const idx = nextShifts.findIndex(s => s.id === updatedShift.id)
+        if (idx !== -1) nextShifts[idx] = singleUpdated
+        else nextShifts.push(singleUpdated)
       } else {
         const allDates = Array.isArray(dates) ? dates : [ctxDateKey || updatedShift.date]
         allDates.forEach((dateKey, idx) => {
           if (idx === 0 && !isNew) {
-            batch.set(doc(db, 'shifts', updatedShift.id), { ...updatedShift, date: dateKey })
+            const firstUpdated = { ...updatedShift, date: dateKey }
+            batch.set(doc(db, 'shifts', updatedShift.id), firstUpdated)
+            const existIdx = nextShifts.findIndex(s => s.id === updatedShift.id)
+            if (existIdx !== -1) nextShifts[existIdx] = firstUpdated
+            else nextShifts.push(firstUpdated)
           } else {
             const newId = uid()
-            batch.set(doc(db, 'shifts', newId), { ...updatedShift, id: newId, date: dateKey })
+            const createdShift = { ...updatedShift, id: newId, date: dateKey }
+            batch.set(doc(db, 'shifts', newId), createdShift)
+            nextShifts.push(createdShift)
           }
         })
       }
     }
 
-    await batch.commit()
+    // 1. Instant optimistic local UI update (0ms)
+    set({ rawShifts: nextShifts, schedule: groupShifts(nextShifts) })
 
-    // Post-save notifications — wrapped so they NEVER cause "error saving"
-    // The shift is already saved at this point; notification failures are non-fatal.
-    if (action === 'publish' && instructors && sms) {
-      try {
-        const firstDate = Array.isArray(dates) ? dates[0] : updatedShift.date
-        if (updatedShift.claimable) {
-          sms.send(instructors.map(i => ({ to: `${i.firstName} ${i.lastName}`, text: `Open shift on ${firstDate}` })))
-        } else if (updatedShift.instructorId) {
-          const inst = instructors.find(i => String(i.id) === String(updatedShift.instructorId))
-          if (inst) {
-            let smsText = 'You have new shift(s)'
-            let notifMessageText = null
-            let subjectText = null
+    try {
+      // 2. Perform Firestore write batch
+      await batch.commit()
 
-            if (wasConfirmed) {
-              if (dayOrTimeChanged) {
-                smsText = 'important changes to a shift you have already confirmed, please confirm again'
-                notifMessageText = 'important changes to a shift you have already confirmed, please confirm again'
-                subjectText = 'Important changes to confirmed shift — please confirm again'
-              } else {
-                smsText = 'details added'
-                notifMessageText = 'details added'
-                subjectText = 'Shift details updated'
+      // 3. Non-blocking post-save notifications
+      if (action === 'publish' && instructors && sms) {
+        Promise.resolve().then(async () => {
+          const firstDate = Array.isArray(dates) ? dates[0] : updatedShift.date
+          if (updatedShift.claimable) {
+            sms.send(instructors.map(i => ({ to: `${i.firstName} ${i.lastName}`, text: `Open shift on ${firstDate}` })))
+          } else if (updatedShift.instructorId) {
+            const inst = instructors.find(i => String(i.id) === String(updatedShift.instructorId))
+            if (inst) {
+              let smsText = 'You have new shift(s)'
+              let notifMessageText = null
+              let subjectText = null
+
+              if (wasConfirmed) {
+                if (dayOrTimeChanged) {
+                  smsText = 'important changes to a shift you have already confirmed, please confirm again'
+                  notifMessageText = 'important changes to a shift you have already confirmed, please confirm again'
+                  subjectText = 'Important changes to confirmed shift — please confirm again'
+                } else {
+                  smsText = 'details added'
+                  notifMessageText = 'details added'
+                  subjectText = 'Shift details updated'
+                }
               }
-            }
 
-            sms.send([{ to: `${inst.firstName} ${inst.lastName}`, text: smsText }])
-            createNotification({
-              type: 'shift_assigned', recipientId: String(inst.id),
-              recipientName: inst.firstName, actorName: 'Admin',
-              shiftId: updatedShift.id, shiftDate: updatedShift.date,
-              shiftTitle: updatedShift.title || 'Shift',
-              shiftStart: updatedShift.start, shiftEnd: updatedShift.end,
-              forAdmin: false,
-              message: notifMessageText,
-              subject: subjectText,
-            }).catch(e => console.warn('Non-fatal notification error:', e))
+              sms.send([{ to: `${inst.firstName} ${inst.lastName}`, text: smsText }])
+              await createNotification({
+                type: 'shift_assigned', recipientId: String(inst.id),
+                recipientName: inst.firstName, actorName: 'Admin',
+                shiftId: updatedShift.id, shiftDate: updatedShift.date,
+                shiftTitle: updatedShift.title || 'Shift',
+                shiftStart: updatedShift.start, shiftEnd: updatedShift.end,
+                forAdmin: false,
+                message: notifMessageText,
+                subject: subjectText,
+              }).catch(() => {})
+            }
           }
-        }
-      } catch (notifErr) {
-        // Log but don't rethrow — shift was saved successfully
-        console.warn('Post-save notification failed (non-fatal):', notifErr)
+        }).catch(e => console.warn('Non-fatal post-save notification warning:', e))
       }
+    } catch (err) {
+      console.error('saveShift network error:', err)
+      // Rollback to pre-save state on network failure
+      set({ rawShifts: prevShifts, schedule: groupShifts(prevShifts) })
+      throw err
     }
   },
 
   // ── Delete ─────────────────────────────────────────────────────────
   async deleteShift(shift, scope, ctxDateKey) {
+    const prevShifts = get().rawShifts
+
     if (scope === 'single') {
-      await deleteDoc(doc(db, 'shifts', shift.id))
-      await createNotification({ type: 'shift_deleted', forAdmin: true, actorName: 'Admin', shiftTitle: shift.title || 'Shift', shiftDate: shift.date })
-      return 1
+      const nextShifts = prevShifts.filter(s => s.id !== shift.id)
+      set({ rawShifts: nextShifts, schedule: groupShifts(nextShifts) })
+      try {
+        await deleteDoc(doc(db, 'shifts', shift.id))
+        Promise.resolve().then(() => {
+          createNotification({ type: 'shift_deleted', forAdmin: true, actorName: 'Admin', shiftTitle: shift.title || 'Shift', shiftDate: shift.date })
+        }).catch(() => {})
+        return 1
+      } catch (err) {
+        console.error('deleteShift single error:', err)
+        set({ rawShifts: prevShifts, schedule: groupShifts(prevShifts) })
+        throw err
+      }
     }
+
     const related = await get().getRelatedShifts(shift)
     const batch   = writeBatch(db)
     let   count   = 0
+    const deletedIds = new Set()
+
     related.forEach(ds => {
       const s = ds.data()
       const inScope = scope === 'all' || (scope === 'future' && s.date >= (ctxDateKey || shift.date))
-      if (inScope) { batch.delete(ds.ref); count++ }
+      if (inScope) {
+        batch.delete(ds.ref)
+        deletedIds.add(s.id)
+        count++
+      }
     })
-    await batch.commit()
-    if (count > 0) await createNotification({ type: 'shift_deleted', forAdmin: true, actorName: 'Admin', shiftTitle: shift.title || 'Shift', shiftDate: shift.date, message: `${count} shift${count !== 1 ? 's' : ''} deleted` })
-    return count
+
+    const nextShifts = prevShifts.filter(s => !deletedIds.has(s.id))
+    set({ rawShifts: nextShifts, schedule: groupShifts(nextShifts) })
+
+    try {
+      await batch.commit()
+      if (count > 0) {
+        Promise.resolve().then(() => {
+          createNotification({ type: 'shift_deleted', forAdmin: true, actorName: 'Admin', shiftTitle: shift.title || 'Shift', shiftDate: shift.date, message: `${count} shift${count !== 1 ? 's' : ''} deleted` })
+        }).catch(() => {})
+      }
+      return count
+    } catch (err) {
+      console.error('deleteShift scope error:', err)
+      set({ rawShifts: prevShifts, schedule: groupShifts(prevShifts) })
+      throw err
+    }
   },
 
   // ── Chip actions ───────────────────────────────────────────────────
   async duplicateShift(shift) {
     const newId = uid()
-    await setDoc(doc(db, 'shifts', newId), { 
+    const newShift = { 
       ...shift, 
       id: newId, 
       seriesId: uid(),
       status: 'draft',
       confirmationStatus: null
-    })
+    }
+
+    const prevShifts = get().rawShifts
+    const nextShifts = [...prevShifts, newShift]
+    set({ rawShifts: nextShifts, schedule: groupShifts(nextShifts) })
+
+    try {
+      await setDoc(doc(db, 'shifts', newId), newShift)
+    } catch (err) {
+      console.error('duplicateShift error:', err)
+      set({ rawShifts: prevShifts, schedule: groupShifts(prevShifts) })
+      throw err
+    }
   },
 
   async multiDupShift(shift, count) {
+    const prevShifts = get().rawShifts
+    const newShifts = []
     const batch = writeBatch(db)
+
     for (let i = 0; i < count; i++) {
       const newId = uid()
-      batch.set(doc(db, 'shifts', newId), { 
+      const newShift = { 
         ...shift, 
         id: newId, 
         seriesId: uid(),
         status: 'draft',
         confirmationStatus: null
-      })
+      }
+      newShifts.push(newShift)
+      batch.set(doc(db, 'shifts', newId), newShift)
     }
-    await batch.commit()
+
+    const nextShifts = [...prevShifts, ...newShifts]
+    set({ rawShifts: nextShifts, schedule: groupShifts(nextShifts) })
+
+    try {
+      await batch.commit()
+    } catch (err) {
+      console.error('multiDupShift error:', err)
+      set({ rawShifts: prevShifts, schedule: groupShifts(prevShifts) })
+      throw err
+    }
   },
 
   async unassignShift(shift) {
-    await updateDoc(doc(db, 'shifts', shift.id), {
-      instructorId: null, claimable: false, confirmationStatus: null,
+    const prevShifts = get().rawShifts
+    const nextShifts = prevShifts.map(s => {
+      if (s.id !== shift.id) return s
+      return { ...s, instructorId: null, claimable: false, confirmationStatus: null }
     })
+    set({ rawShifts: nextShifts, schedule: groupShifts(nextShifts) })
+
+    try {
+      await updateDoc(doc(db, 'shifts', shift.id), {
+        instructorId: null, claimable: false, confirmationStatus: null,
+      })
+    } catch (err) {
+      console.error('unassignShift error:', err)
+      set({ rawShifts: prevShifts, schedule: groupShifts(prevShifts) })
+      throw err
+    }
   },
 
   // ── Settings ───────────────────────────────────────────────────────
